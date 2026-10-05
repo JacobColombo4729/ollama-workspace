@@ -7,7 +7,7 @@ NUM_CTX = 32768            # max context window in tokens; models with less use 
                            # Bigger costs more memory (a 27B model: 32k ~19 GB, 64k ~22 GB)
 CHARS_PER_TOKEN = 3.5      # rough average for code/English, used for context budgeting
 THINK_BUDGET = 4096        # extra tokens for thinking models, on top of the reply length
-LENGTHS = {"s": 512, "m": 1024, "l": 2048}  # reply length choices, in tokens
+REPLY_LIMIT = 4096         # safety cap on reply tokens; the model sizes replies itself (see STYLE)
 
 # Memory (raw log -> dated summaries; the full log is always kept on disk)
 MAX_RECENT = 30_000        # chars of raw log the model sees before compressing (~8.5k tokens)

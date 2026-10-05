@@ -11,7 +11,7 @@ import ollama
 from . import config, memory, models
 from .console import ask
 from .attachments import attach_files
-from .config import (CHARS_PER_TOKEN, LENGTHS, MAX_TOOL_STEPS, MEMORY_SHARE, STYLE,
+from .config import (CHARS_PER_TOKEN, REPLY_LIMIT, MAX_TOOL_STEPS, MEMORY_SHARE, STYLE,
                      THINK_BUDGET)
 from .tools import TOOLS, changed, run_tool
 
@@ -45,11 +45,6 @@ HELP = """Commands:
   exit                quit"""
 
 COMMANDS = ("/new", "/chats", "/resume", "/rename", "/models", "/model", "/notes", "/help")
-
-
-def ask_length() -> int:
-    choice = ask("Length - (s)hort 512 / (m)edium 1024 / (l)ong 2048 [m]: ").lower()
-    return LENGTHS.get(choice[:1], LENGTHS["m"]) if choice else LENGTHS["m"]
 
 
 def think_budget() -> int:
@@ -307,7 +302,7 @@ def main() -> None:
             handle_command(q, project)
             continue
         prompt, attached = attach_files(q)
-        num_predict = ask_length()
+        num_predict = REPLY_LIMIT
         messages = build_messages(prompt)
         changed.clear()
         replies, done_reason = [], None
@@ -336,7 +331,7 @@ def main() -> None:
             continue  # nothing to save
         reply = "\n".join(replies)
         if not reply:
-            print(f"[no answer - stopped: {done_reason}; try a longer length or raise THINK_BUDGET]")
+            print(f"[no answer - stopped: {done_reason}; raise REPLY_LIMIT or THINK_BUDGET in config.py]")
         print()
         # log only file names, not contents, so big files don't flood memory
         logged = q + (f" [attached: {', '.join(attached)}]" if attached else "")

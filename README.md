@@ -78,7 +78,7 @@ python chat.py --workspace path/to/project    use another folder as the workspac
 | `/help` | List commands |
 | `exit` | Quit (Ctrl+C at the prompt also works; Ctrl+C during a reply stops it) |
 
-Each message asks for a reply length: short (512 tokens), medium (1024) or long (2048). Unnamed chats that never got a message are discarded. Named ones are kept.
+The model sizes each reply to the question, with a safety cap of 4096 tokens (`REPLY_LIMIT` in config.py). Unnamed chats that never got a message are discarded. Named ones are kept.
 
 ### Run it from any folder (`ochat`)
 
