@@ -1,0 +1,4 @@
+#!/bin/sh
+# Launcher for macOS/Linux: "ochat [name] [--new | --resume] [--model NAME] [--workspace FOLDER]".
+# Put this folder on your PATH (and chmod +x ochat) to run it from any folder.
+exec python3 "$(dirname "$0")/chat.py" "$@"

@@ -1,0 +1,4 @@
+# Normalize line endings; the launchers need their platform's endings to run.
+* text=auto
+ochat text eol=lf
+*.bat text eol=crlf
