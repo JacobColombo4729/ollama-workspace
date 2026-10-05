@@ -5,7 +5,7 @@ Ollama, and the chat adapts (models without tools chat without file access; mode
 with a small context get smaller memory and file budgets).
 """
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import ollama
 
@@ -14,6 +14,9 @@ from .config import CHARS_PER_TOKEN, DATA_DIR, NUM_CTX
 
 SETTINGS = DATA_DIR / "settings.json"  # remembers the last model you picked
 
+THINK_CHOICES = ("off", "low", "medium", "high")  # what the user picks with /think
+LEVEL_ORDER = ("low", "medium", "high", "xhigh", "max")  # levels models may report
+
 
 @dataclass
 class Model:
@@ -21,10 +24,24 @@ class Model:
     tools: bool      # can call tools (file editing, history search, notes)
     thinking: bool   # streams its reasoning separately
     num_ctx: int     # context window used: NUM_CTX, or less if the model's max is smaller
+    levels: list[str] = field(default_factory=list)  # thinking levels it lists; [] = on/off only
+    can_disable: bool = True  # False for models that always think
 
-    @property
-    def think(self) -> bool | None:
-        return True if self.thinking else None  # None = don't send the option at all
+    def think_value(self, choice: str) -> bool | str | None:
+        """The `think` option to send for a /think choice; None = don't send it at all."""
+        if not self.thinking:
+            return None
+        if choice == "off":
+            return False if self.can_disable else None
+        if not self.levels:
+            return True
+        if choice in self.levels:
+            return choice
+        if choice == "high":
+            return self.levels[-1]  # the model's strongest level, e.g. "xhigh"
+        want = LEVEL_ORDER.index(choice)
+        return min(self.levels, key=lambda lvl: abs(LEVEL_ORDER.index(lvl) - want)
+                   if lvl in LEVEL_ORDER else len(LEVEL_ORDER))
 
     def chars(self, share: float) -> int:
         """Rough number of characters that fit in this share of the context window."""
@@ -50,13 +67,26 @@ def refresh() -> list[str]:
     return installed
 
 
+def _thinking_info(name: str) -> dict:
+    """Ollama's /api/show lists a model's thinking levels, e.g. {"values": [false, "low",
+    "medium", "xhigh"]}, but the Python library drops that field, so ask the API directly."""
+    try:
+        return ollama.Client()._client.post("/api/show", json={"model": name}).json().get(
+            "thinking") or {}
+    except Exception:
+        return {}
+
+
 def load(name: str) -> Model:
     info = ollama.show(name)
     caps = info.capabilities or ["completion"]
     max_ctx = next((v for k, v in (info.modelinfo or {}).items()
                     if k.endswith(".context_length")), 0)
+    values = _thinking_info(name).get("values") or []
     return Model(name, "tools" in caps, "thinking" in caps,
-                 min(NUM_CTX, max_ctx) if max_ctx else NUM_CTX)
+                 min(NUM_CTX, max_ctx) if max_ctx else NUM_CTX,
+                 levels=[v for v in values if isinstance(v, str)],
+                 can_disable=not values or False in values)
 
 
 def use(name: str) -> Model:

@@ -43,6 +43,8 @@ Works on **Windows, macOS and Linux** (tested on Windows 11 and Ubuntu) anywhere
 | `/model` | Pick a model from a list |
 | `/model <n or name>` | Switch by list number, full name, name without `:latest`, or a unique part of the name (e.g. `/model llama`) |
 | `--model <name>` | Choose the model when launching (overrides the chat's saved model) |
+| `/think [off\|low\|medium\|high]` | How much a thinking model reasons before answering. Less is faster. Saved per chat; default `low` (`THINK_LEVEL`). With no argument, shows the current level and what the model supports. |
+| `--think <level>` | Set the thinking level when launching |
 
 **Which model is used:** a chat reopens with the model it last used. A new chat starts with the model you picked most recently. Models you install later show up in `/models` right away, without restarting.
 
@@ -51,10 +53,23 @@ Works on **Windows, macOS and Linux** (tested on Windows 11 and Ubuntu) anywhere
 | Model supports | Effect |
 |---|---|
 | **tools** | File editing, history search and project notes are enabled. Without tool support, the model just chats, and it's told it can't see your files. |
-| **thinking** | Its reasoning streams dimmed above the answer and gets an extra token budget (`THINK_BUDGET`). |
+| **thinking** | Its reasoning streams dimmed above the answer. `/think` controls how much it reasons: models that report levels get the closest one (`high` uses the model's strongest, e.g. `xhigh`); others only switch thinking on or off. Models that always think can't be turned off. |
 | **context length** | The context window is `NUM_CTX` (32k), or the model's own maximum if that's smaller. Memory, file reads and attachments are scaled to fit, so small-context models still work. Anything trimmed stays on disk. |
 
 Embedding-only models are hidden, since they can't chat.
+
+### Making it faster
+
+Speed depends mostly on whether the model fits in your GPU's memory. Run `ollama ps` while chatting:
+
+- **`100% GPU`:** fast.
+- **A large CPU share (e.g. `79%/21% CPU/GPU`):** expect a few tokens per second.
+
+At a few tokens per second, a model that writes 1,000+ tokens of thinking takes minutes before it acts.
+
+1. **Use a model that fits your GPU.** As a rough guide, the model's size in `ollama list`, plus 1–4 GB for context, should be under your VRAM. For example, `qwen3:8b` fits an 8 GB card with `NUM_CTX = 16384`. Switch per chat with `/model`: a small model for quick work, a big one when quality matters.
+2. **Think less.** `/think low` or `/think off` cuts the reasoning before each answer and tool call.
+3. **Small extras:** set `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0` for the Ollama server and restart it, and close other apps that use the GPU.
 
 ## Chats and projects
 
@@ -76,7 +91,17 @@ python chat.py --workspace path/to/project    use another folder as the workspac
 | `/rename <name>` | Rename the current chat (unnamed chats are titled after their first message; names must be unique) |
 | `/notes` | Show the project notes and where to edit them |
 | `/help` | List commands |
-| `exit` | Quit (Ctrl+C at the prompt also works; Ctrl+C during a reply stops it) |
+| `exit` | Quit (Ctrl+C at the prompt also works) |
+
+### Interrupting to add information
+
+Press **Ctrl+C** while the model is thinking or answering. The model stops right away and you're asked:
+
+```
+[paused] Add info for the model (Enter = just stop):
+```
+
+Type a correction or more context, e.g. `it's weekly, not daily`. The model continues **with its reasoning so far** plus your note, rather than starting over. Press Enter on an empty line to just stop. The history records interjections as `[interjected: ...]`, and a stopped reply that hadn't said anything yet isn't saved.
 
 The model sizes each reply to the question, with a safety cap of 4096 tokens (`REPLY_LIMIT` in config.py). Unnamed chats that never got a message are discarded. Named ones are kept.
 
@@ -172,7 +197,8 @@ All settings are in `ollama_workspace/config.py`:
 | Setting | Default | Meaning |
 |---|---|---|
 | `NUM_CTX` | 32768 | Max context window in tokens (a model with a smaller max uses its own) |
-| `THINK_BUDGET` | 4096 | Extra tokens for thinking models |
+| `THINK_LEVEL` | `low` | Thinking level for chats that haven't set one with `/think` |
+| `THINK_BUDGET` | 4096 | Extra tokens for reasoning at `medium`; `low` gets half, `high` double |
 | `MAX_RECENT` / `KEEP_RECENT` | 30k / 15k chars | When to compress older log, and how much raw log stays visible |
 | `CHUNK` | 15k chars | Log covered by each summary |
 | `SUMMARY_BUDGET` | 12k chars | Total summary size before the two oldest merge |

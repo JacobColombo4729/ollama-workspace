@@ -54,7 +54,7 @@ def list_chats(project: Path) -> list["Chat"]:
 def _ask(prompt: str) -> str:
     m = models.current
     r = ollama.chat(model=m.name, messages=[{"role": "user", "content": prompt}],
-                    options={"num_ctx": m.num_ctx}, think=False if m.thinking else None)
+                    options={"num_ctx": m.num_ctx}, think=m.think_value("off"))  # summaries don't need reasoning
     return r["message"]["content"].strip()
 
 
