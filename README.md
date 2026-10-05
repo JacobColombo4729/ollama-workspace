@@ -203,3 +203,7 @@ ollama_workspace/
   console.py             reading user input
 data/                    your chats, notes and settings (created on first run, git-ignored)
 ```
+
+## License
+
+[MIT](LICENSE) - free to use, modify and share, including commercially, as long as the copyright notice is kept. The software comes with no warranty.
