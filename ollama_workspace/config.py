@@ -19,8 +19,16 @@ MEMORY_SHARE = 0.5         # max share of the context for notes + summaries + re
 
 # Files and code editing
 READ_SHARE = 0.4           # max share of the context one file read/attachment may use
-MAX_TOOL_STEPS = 25        # max model->tool round trips per message
-AUTO_APPROVE = False       # True = apply file edits without asking
+MAX_TOOL_STEPS = 50        # max model->tool round trips per message (restricted mode)
+UNLEASHED_TOOL_STEPS = 200 # the same in unleashed mode, for long autonomous tasks
+AUTO_APPROVE = False       # restricted mode: True = edit, create, move and delete files without
+                           # asking. Unleashed mode never asks. Either way, /approve switches it.
+                           # Commands: restricted asks a password for dangerous ones only
+                           # (see guard.py; the mode comes from OCHAT_MODE)
+COMMAND_TIMEOUT = 300      # default seconds before a shell command is stopped
+MAX_COMMAND_TIMEOUT = 3600 # the most the model may ask for (run_command's timeout)
+WEB_TIMEOUT = 20           # seconds for web_search / fetch_url / http_request (unleashed)
+TRASH_DAYS = 30            # deleted files stay restorable this long (see /trash)
 WORKSPACE = pathlib.Path.cwd().resolve()  # the codebase the model may edit: where you launch
 SKIP_DIRS = {"__pycache__", "node_modules", "venv", "dist", "build"}  # plus any .hidden dir
 

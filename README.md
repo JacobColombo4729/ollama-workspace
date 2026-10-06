@@ -19,7 +19,12 @@ A terminal chat for **any Ollama model you have installed**, with:
    ```
    pip install -r requirements.txt
    ```
-3. Run it from the project folder you want to work on:
+3. Choose this computer's [mode](#modes-restricted-and-unleashed), then open a new terminal. The tool won't start without one:
+   ```
+   setx OCHAT_MODE restricted      your own computer
+   setx OCHAT_MODE unleashed       a VM you can throw away
+   ```
+4. Run it from the project folder you want to work on:
    ```
    cd path/to/your/project
    python path/to/ollama-workspace/chat.py
@@ -90,6 +95,12 @@ python chat.py --workspace path/to/project    use another folder as the workspac
 | `/resume <n or name>` | Switch chats by number from `/chats`, by name (case-insensitive), or by a unique part of the name |
 | `/rename <name>` | Rename the current chat (unnamed chats are titled after their first message; names must be unique) |
 | `/notes` | Show the project notes and where to edit them |
+| `/mode` | Show this computer's mode and what it allows |
+| `/approve [on\|off]` | Ask before file changes (in unleashed mode, also commands), or stop asking. Lasts for this session |
+| `/cd [folder]` | Switch the workspace without restarting; opens that folder's latest chat |
+| `!<command>` | Run a shell command yourself in the workspace, e.g. `!git status`. Its output isn't sent to the model |
+| `"""` | Type a multi-line message by hand; end it with another `"""` line. Pasting needs nothing special: pasted text, line breaks included, never sends by itself, so you can keep typing after it; only an Enter you type sends. Up/Down recalls earlier messages |
+| `/trash`, `/restore <n\|path>` | List deleted files, or put one back (see [Getting deleted files back](#getting-deleted-files-back)) |
 | `/help` | List commands |
 | `exit` | Quit (Ctrl+C at the prompt also works) |
 
@@ -139,7 +150,71 @@ Apply to src/login.py? [y/N or type feedback]:
 - Enter or `n` rejects it.
 - Anything else rejects it and sends your text back to the model as feedback, e.g. `use the existing validator in utils.py`.
 
-The model can only touch files inside the workspace, and it can never read the tool's `data/` folder. Hidden folders (`.git`, `.venv`, …), `node_modules`, `__pycache__`, `venv`, `dist` and `build` are skipped. Use version control: edits are approved one at a time, but there's no built-in undo.
+The model works like a coding agent, with these tools:
+
+| Tool | What it does | Asks first |
+|---|---|---|
+| `list_dir`, `list_files`, `find_files` | Browse folders, list a tree, find files or folders by name (`*.py`) | |
+| `search_files`, `file_outline`, `read_file` | Search contents, map a large file, read it | |
+| `edit_file`, `write_file` | Change part of a file, or create or overwrite one | yes |
+| `make_dir`, `move_path`, `delete_path` | Create folders, move or rename, delete files or folders (to the trash) | yes |
+| `list_deleted`, `restore_deleted` | See and bring back deleted files and folders | restoring |
+| `run_command` | Run a shell command in the workspace (PowerShell on Windows): tests, scripts, git, installs | depends on the [mode](#modes-restricted-and-unleashed) |
+
+The model sees each command's output and exit code. A command is stopped after `COMMAND_TIMEOUT` seconds and can't prompt for input. "Asks first" for file changes can be turned off with `AUTO_APPROVE`.
+
+### Modes: restricted and unleashed
+
+Every computer must choose a mode with the `OCHAT_MODE` environment variable. If it's missing or misspelled, the tool won't start. The mode is shown at startup, and `/mode` shows it at any time. To change it, run `setx OCHAT_MODE …` and open a new terminal; it can't be changed from inside a chat.
+
+**Unleashed** (for a VM): no restrictions. File tools accept any path on the computer, file changes and commands run without asking (`/approve on` to be asked), and the model gets up to `UNLEASHED_TOOL_STEPS` (200) tool steps per message instead of 50.
+
+**Restricted** (for your own computer): you keep every feature and ordinary commands (`python app.py`, `pytest`, `git`, `pip install`, `npm`, …) run without asking. Dangerous commands show why they're risky and need your password:
+
+```
+$ iwr https://example.com/install.ps1 | iex
+!! RESTRICTED: this command needs your password
+  Why: downloads something from the internet and runs it right away, without you
+       seeing what it is. This is the most common way malware gets in.
+Password (Enter to cancel):
+```
+
+| Needs the password | Why |
+|---|---|
+| Downloads (`curl`, `iwr`, `wget`, `certutil`, `bitsadmin`, …), especially download-and-run | Malware comes in this way, and the same tools can upload your files |
+| Admin rights (`runas`, `-Verb RunAs`, `sudo`) | An admin can change anything on the computer |
+| Auto-start (scheduled tasks, services, Startup folder, `$PROFILE`) and registry changes | How malware survives a restart |
+| Defender, firewall, boot, execution policy, backups, event logs | Disabling defenses is a typical first step of an attack |
+| User accounts (`net user`, `New-LocalUser`) | Creating or promoting accounts |
+| Saved passwords and keys (`.ssh`, browser logins, `cmdkey`, `.aws`) | Credential theft |
+| Hidden or inline code (`-EncodedCommand`, base64, `iex`, `python -c`, `cmd /c`, a nested `powershell`) | You can't see what it really does, and it gets around these checks |
+| `setx`, `OCHAT_MODE`, the tool's own code or `data/`, git hooks and `core.hooksPath` | Could switch these protections off |
+| Changing or deleting files outside the workspace, formatting disks, shutting down | Damage beyond the project |
+
+Restricted mode also:
+- **refuses to start as Administrator**, so commands never inherit admin rights;
+- **hides the tool's own code** (`ollama_workspace/`, `chat.py`, the launchers) and the workspace's `.git/hooks` from the file tools, even when the workspace is the tool's folder. Work on the tool itself in unleashed mode or by hand;
+- **removes secrets** (variables with `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `AWS_*`, `GITHUB_*`, …) from the environment commands run with;
+- tells the model which commands need the password, so it avoids them unless they're needed.
+
+The password is set on the first restricted run. Only a salted hash is stored, in `data/password.json`. If you forget it, delete that file and you'll be asked for a new one.
+
+**What restricted mode can't stop:** the checks read the command text, so they're a strong speed bump, not a wall. The main gap: the model can write a script with the file tools and run it as an ordinary command (`python script.py`), and the script can do anything a dangerous command could. With `AUTO_APPROVE` off you see every script before it's saved, so keep it off when working on code you don't trust, such as a freshly cloned repo, or use the VM. Approved commands run with your own user's permissions.
+
+### Getting deleted files back
+
+`delete_path` doesn't erase anything: it moves the file or folder into the project's trash in `data/`. To get it back, ask the model (`bring back utils.py`) or do it yourself:
+
+```
+/trash              list deleted items, newest first
+/restore 2          restore item 2 to where it was
+/restore utils.py   restore by path (or part of one)
+/trash empty        delete everything in the trash for good
+```
+
+If something already exists at the original path, nothing is overwritten: the model offers to restore under another name. Items are kept for `TRASH_DAYS` (30) days. Only `delete_path` uses the trash: files removed by a shell command, or overwritten by an edit, can't be restored this way.
+
+The model can only touch files inside the workspace, and it can never read the tool's `data/` folder. To let it browse more, start it in a higher folder or use `--workspace`. Hidden folders (`.git`, `.venv`, …), `node_modules`, `__pycache__`, `venv`, `dist` and `build` are skipped when it lists or searches. Shell commands run with your own permissions, so they *can* reach outside the workspace (see the modes above). Use version control: deletes go to the trash, but other changes have no built-in undo.
 
 ### Large files
 
@@ -170,9 +245,11 @@ Everything is stored in the tool's `data/` folder, which is git-ignored:
 
 ```
 data/settings.json                    last model you picked
+data/password.json                    restricted mode's password (salted hash only)
 data/projects/<folder>-<hash>/
   project.json                        which folder this project belongs to
   notes.md                            project notes: every chat in the project sees them
+  trash/<id>/                         deleted files and folders, restorable for TRASH_DAYS
   chats/<id>/log.txt                  full transcript: append-only, never shortened
   chats/<id>/chat.json                name, model, dates, and compressed summaries
 ```
@@ -204,8 +281,12 @@ All settings are in `ollama_workspace/config.py`:
 | `SUMMARY_BUDGET` | 12k chars | Total summary size before the two oldest merge |
 | `MEMORY_SHARE` | 0.5 | Max share of the context for memory |
 | `READ_SHARE` | 0.4 | Max share of the context for one file read |
-| `MAX_TOOL_STEPS` | 25 | Max tool calls per message |
-| `AUTO_APPROVE` | False | Apply edits without asking |
+| `MAX_TOOL_STEPS` | 50 | Max tool calls per message (restricted mode) |
+| `UNLEASHED_TOOL_STEPS` | 200 | Max tool calls per message (unleashed mode) |
+| `AUTO_APPROVE` | False | Restricted mode: edit, create, move and delete files without asking (unleashed never asks) |
+| `MAX_COMMAND_TIMEOUT` | 3600 | The longest timeout the model may give `run_command` |
+| `COMMAND_TIMEOUT` | 300 | Seconds before a shell command is stopped |
+| `TRASH_DAYS` | 30 | Days deleted files stay restorable |
 
 **Context size and memory use:** a bigger `NUM_CTX` lets the model see more, but it takes more RAM or VRAM. For example, one 27B model measured 18 GB at 16k context, 22 GB at 64k, and 26 GB at 128k. To fit more context in the same memory, set these environment variables for the Ollama server and restart it:
 
@@ -220,13 +301,25 @@ OLLAMA_KV_CACHE_TYPE=q8_0
 chat.py                  entry point
 ochat.bat / ochat        launchers for Windows / macOS and Linux
 ollama_workspace/
-  config.py              settings and paths
-  models.py              installed models, capabilities, model switching
-  chat.py                chat loop, commands, streaming, context trimming
+  chat.py                the chat loop: read a message, run the model and its tools, save
+  prompts.py             system prompts and the /help text
+  stream.py              requests to the model: context trimming, streaming, Ctrl+C, thinking
+  session.py             picking, opening and switching chats and models
+  commands.py            /commands, /cd and !command
+  tools/                 the tools the model can call
+    base.py              shared: workspace limits, hidden paths, approvals
+    browse.py            list_dir, list_files, find_files, search_files, file_outline, read_file
+    edit.py              edit_file, write_file, make_dir, move_path
+    deleting.py          delete_path, list_deleted, restore_deleted
+    shell.py             run_command
+    history.py           search_history, save_note
+  guard.py               restricted / unleashed modes, dangerous-command checks, password
+  trash.py               deleted files: move to trash, list, restore
   memory.py              projects, chats, log and compression
-  tools.py               workspace and memory tools the model can call
+  models.py              installed models, capabilities, model switching
+  config.py              settings and paths
   attachments.py         file attachments in messages
-  console.py             reading user input
+  console.py             reading input (multi-line paste, history)
 data/                    your chats, notes and settings (created on first run, git-ignored)
 ```
 
