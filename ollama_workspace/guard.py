@@ -47,14 +47,14 @@ _DL = (r"\b(iwr|irm|curl|wget|Invoke-WebRequest|Invoke-RestMethod|Start-BitsTran
 _RUN = r"\b(iex|Invoke-Expression|sh|bash|python3?|py|node|powershell|pwsh|cmd)\b"
 
 # (pattern, why it needs your password); checked case-insensitively against the command
+# A plain download (curl/wget/iwr to read or save a file) isn't gated on its own - that's
+# normal dev work (hitting an API, fetching a dataset or model). Only downloading something
+# and running it, which is how malware actually gets in, needs your password.
 DANGEROUS = [
     (rf"({_DL}).*(\|\s*{_RUN}|[;&\n].*(\bStart-Process\b|\bstart\b|&\s*['\"]?\.{{0,2}}[\\/]|"
      r"\.[\\/]\S+\.(exe|ps1|bat|cmd|sh|py|msi)\b))",
      "downloads something from the internet and runs it right away, without you "
      "seeing what it is. This is the most common way malware gets in."),
-    (_DL,
-     "downloads from the internet. A download can bring in malware, and the same tools "
-     "can upload your files somewhere."),
     (r"\brunas\b|-Verb\s+['\"]?RunAs|\bg?sudo\b",
      "asks for Administrator rights. With them a command can change anything on the "
      "computer, including security settings and other users' files."),
@@ -63,8 +63,9 @@ DANGEROUS = [
      r"Start Menu[\\/]Programs[\\/]Startup|shell:startup|\$PROFILE",
      "sets something up to run automatically (at startup, on a schedule, or in every "
      "PowerShell session). That's how malware survives a restart."),
-    (r"\breg(\.exe)?\s+(add|delete|import|load|restore)\b|\b(HKLM|HKCU|HKEY_\w+)\b|"
-     r"(New|Set|Remove)-ItemProperty",
+    # write verbs only - reading the registry (reg query, Get-ItemProperty, Test-Path
+    # HKLM:\...) is common and harmless; only changing it needs your password.
+    (r"\breg(\.exe)?\s+(add|delete|import|load|restore)\b|(New|Set|Remove)-ItemProperty",
      "changes the Windows registry, which controls startup programs, security settings "
      "and how Windows behaves."),
     (r"Set-MpPreference|Add-MpPreference|\bnetsh\b.*\b(advfirewall|firewall)\b|"
@@ -80,8 +81,11 @@ DANGEROUS = [
     (r"-(e|ec|en|enc|enco|encodedcommand)\s+[A-Za-z0-9+/=]{16,}|FromBase64String|"
      r"\bbase64\s+(-d|--decode)\b|\b(iex|Invoke-Expression)\b|\[ScriptBlock\]::Create",
      "runs hidden or encoded code, so you can't read what it really does."),
+    # requires an actual invocation flag, not just the word appearing (e.g. in a path or a
+    # sentence) - a bare "powershell" mention is common and not itself risky.
     (r"\b(python3?|py|node|perl|ruby)(\.exe)?\s+(-[\w-]+\s+)*-[ce]\b|"
-     r"\b(powershell|pwsh)(\.exe)?\b|\bcmd(\.exe)?\s+/[ck]\b|\b(bash|sh|wsl)(\.exe)?\s+-c\b",
+     r"\b(powershell|pwsh)(\.exe)?\b.*-(c|command|encodedcommand|file)\b|"
+     r"\bcmd(\.exe)?\s+/[ck]\b|\b(bash|sh|wsl)(\.exe)?\s+-c\b",
      "runs a code snippet or a second shell inline, which can do anything and gets "
      "around these checks."),
     (r"OCHAT_MODE|\bsetx\b|SetEnvironmentVariable|password\.json",
@@ -210,8 +214,6 @@ def _password_ok(attempts: int = 3) -> bool:
 def risks(command: str, workspace: Path) -> list[str]:
     """Why this command is dangerous; empty if it's an ordinary command."""
     found = [why for rx, why in DANGEROUS if rx.search(command)]
-    if found and found[0] == DANGEROUS[0][1]:
-        found.remove(DANGEROUS[1][1])  # download-and-run already says it downloads
     low = command.lower()
     overlap = _inside(workspace, ROOT) or _inside(ROOT, workspace)
     # with no overlap, any mention of the tool's folder is suspicious; with overlap, only
