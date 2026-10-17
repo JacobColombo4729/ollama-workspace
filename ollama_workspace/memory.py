@@ -6,6 +6,8 @@ data/projects/<folder>-<hash>/       one per workspace folder
     board.txt                        recent timestamped posts shared by every chat/agent
                                       (post_to_board); same [timestamp] who: text lines as
                                       log.txt, kept only as far back as the budget allows
+    scope.txt                        authorized targets for security testing (see scope.py);
+                                      empty by default, checked only if you've defined one
     chats/<id>/log.txt               full transcript, append-only, never shortened
     chats/<id>/chat.json             title, timestamps, and summaries of older log
 
@@ -45,6 +47,7 @@ def project_dir(workspace: Path) -> Path:
         (d / "project.json").write_text(json.dumps({"path": str(workspace)}, indent=2), "utf-8")
     (d / "notes.md").touch()
     (d / "board.txt").touch()
+    (d / "scope.txt").touch()
     return d
 
 

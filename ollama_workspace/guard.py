@@ -19,6 +19,7 @@ import secrets
 import sys
 from pathlib import Path
 
+from . import config, memory, scope
 from .config import DATA_DIR, ROOT
 
 MODES = ("restricted", "unleashed")
@@ -256,6 +257,12 @@ def risks(command: str, workspace: Path) -> list[str]:
         if outside or HOME_REF.search(command):
             where = ", ".join(outside[:3]) or "your user folder"
             found.append(f"changes, moves or deletes files outside the workspace ({where}).")
+    # only checked at all once a project has defined a scope (see scope.py) - an ordinary,
+    # non-pentest project never hits this
+    project = memory.project_dir(config.WORKSPACE)
+    if out := scope.out_of_scope(command, project):
+        found.append(f"touches a target outside this project's defined scope: "
+                     f"{', '.join(out[:3])}. /scope add it first if it's authorized.")
     return found
 
 

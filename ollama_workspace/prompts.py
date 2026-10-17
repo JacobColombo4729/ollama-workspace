@@ -58,6 +58,8 @@ HELP = """Commands:
                       (less = faster; no argument: show the current level)
   /notes              show the project notes (shared by all chats here)
   /board              show the shared agent board (recent posts, seen by every agent here)
+  /scope [add|remove|clear] <target>   authorized targets for security testing; empty by
+                      default (nothing checked) - add an IP, CIDR, hostname, or *.domain
   /trash              list deleted files and folders that can be restored
   /restore <n|path>   put a deleted item back where it was (/trash empty: delete for good)
   /mode               show this computer's mode (restricted or unleashed) and what it allows

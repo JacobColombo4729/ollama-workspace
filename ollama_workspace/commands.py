@@ -5,7 +5,7 @@ import pathlib
 import shutil
 import subprocess
 
-from . import agents, config, guard, memory, models, tools, trash
+from . import agents, config, guard, memory, models, scope, tools, trash
 from .config import TRASH_DAYS
 from .console import ask
 from .prompts import HELP
@@ -15,8 +15,8 @@ from .tools import SHELL
 
 
 COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/agent", "/models", "/model",
-            "/think", "/notes", "/board", "/trash", "/restore", "/mode", "/approve", "/cd",
-            "/unlock", "/lock", "/help")
+            "/think", "/notes", "/board", "/scope", "/trash", "/restore", "/mode", "/approve",
+            "/cd", "/unlock", "/lock", "/help")
 
 
 def handle_command(q: str, project) -> None:
@@ -70,6 +70,8 @@ def handle_command(q: str, project) -> None:
         print(path.read_text("utf-8").strip() or "(nothing posted yet)")
         print(f"\033[2m[every agent in this project sees recent posts automatically; "
               f"edit by hand: {path}]\033[0m")
+    elif cmd == "/scope":
+        handle_scope(project, arg)
     elif cmd == "/mode":
         print(guard.describe())
         print("\033[2m[restricted is the default; set per computer with setx OCHAT_MODE "
@@ -152,6 +154,52 @@ def delete_chats(project, arg: str) -> None:
         memory.active = None
         remaining = memory.list_chats(project)
         switch_to(remaining[0] if remaining else memory.Chat.create(project))
+
+
+def print_scope(items: list[str]) -> None:
+    if not items:
+        print("No scope defined for this project - commands aren't checked against any "
+              "target list. /scope add <target> to define one (an IP, a CIDR range like "
+              "10.0.0.0/24, a hostname, or *.example.com).")
+        return
+    for i, t in enumerate(items, 1):
+        print(f"{i:>4}. {t}")
+    print("\033[2m[in restricted mode, a command mentioning anything outside this list "
+          "needs your password; /scope add|remove|clear]\033[0m")
+
+
+def handle_scope(project, arg: str) -> None:
+    """/scope: list this project's authorized targets for security testing. /scope add
+    <target>: add an IP, CIDR range, hostname, or *.wildcard domain. /scope remove
+    <n|target>: remove one. /scope clear: remove all (asks first). Empty (the default)
+    means nothing is checked - this only matters once you've deliberately defined one."""
+    sub, _, rest = arg.partition(" ")
+    if sub.lower() == "add":
+        target = rest.strip() or ask("Target to add (IP, CIDR, hostname, or *.domain): ")
+        if target:
+            scope.add(project, target)
+            print(f"Added to scope: {target}")
+        return
+    if sub.lower() == "remove":
+        items = scope.targets(project)
+        target = rest.strip()
+        if not target:
+            print_scope(items)
+            target = ask("Number or target to remove: ")
+        if not target:
+            return
+        if removed := scope.remove(project, target):
+            print(f"Removed from scope: {removed}")
+        else:
+            print(f"Nothing in scope matches '{target}'.")
+        return
+    if sub.lower() == "clear":
+        items = scope.targets(project)
+        if items and ask(f"Clear all {len(items)} scope entries? [y/N]: ").lower() in ("y", "yes"):
+            scope.clear(project)
+            print("Scope cleared; nothing is checked until you add targets again.")
+        return
+    print_scope(scope.targets(project))
 
 
 def handle_agent(project, arg: str) -> None:

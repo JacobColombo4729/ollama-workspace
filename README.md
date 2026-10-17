@@ -97,6 +97,7 @@ python chat.py --workspace path/to/project    use another folder as the workspac
 | `/agent [n\|name]` | Switch this chat to an agent profile (its own model, tool access, and persona). `/agent new <name>` creates one - you describe it in your own words, which drives how much it narrates vs. just shows code; `/agent delete <n\|name>` removes one; `/agent none` goes back to this chat's own model and full tools |
 | `/notes` | Show the project notes and where to edit them |
 | `/board` | Show the shared [agent board](#agents) and where to edit it |
+| `/scope [add\|remove\|clear] <target>` | Authorized targets for [security testing](#scope-authorized-targets-for-security-testing); empty by default (nothing checked) |
 | `/mode` | Show this computer's mode and what it allows |
 | `/unlock`, `/lock` | Let the model see and edit ochat's own code for this session (restricted mode asks your password), or stop it again. Chats and the password stay off limits |
 | `/approve [on\|off]` | Ask before file changes (in unleashed mode, also commands), or stop asking. Lasts for this session |
@@ -207,6 +208,7 @@ Password (Enter to cancel):
 | Hidden or inline code (`-EncodedCommand`, base64, `iex`, `python -c`, `cmd /c`, a nested `powershell`/`bash -c`) | You can't see what it really does, and it gets around these checks |
 | `setx`, `OCHAT_MODE`, the tool's own code or `data/`, git hooks and `core.hooksPath` | Could switch these protections off |
 | Changing or deleting files outside the workspace, formatting disks, shutting down | Damage beyond the project |
+| A command mentioning a target outside this project's [scope](#scope-authorized-targets-for-security-testing), if one is defined | Catches a typo'd IP or a hallucinated host before it runs, not after |
 
 Restricted mode also:
 - **refuses to start as Administrator**, so commands never inherit admin rights;
@@ -217,6 +219,21 @@ Restricted mode also:
 The password is set the first time a dangerous action actually needs it - not at startup, so a session that never hits one needs no setup. Only a salted hash is stored, in `data/password.json`. If you forget it, delete that file and you'll be asked for a new one.
 
 **What restricted mode can't stop:** the checks read the command text, so they're a strong speed bump, not a wall. The main gap: the model can write a script with the file tools and run it as an ordinary command (`python script.py`), and the script can do anything a dangerous command could. With `AUTO_APPROVE` off you see every script before it's saved, so keep it off when working on code you don't trust, such as a freshly cloned repo, or use the VM. Approved commands run with your own user's permissions.
+
+### Scope: authorized targets for security testing
+
+For authorized pentesting/red-team work, a project can define its **scope** - the hosts, IP ranges, or domains you're actually allowed to touch. It's empty by default for every project, which means nothing is checked: this only ever adds friction to a project where you've deliberately defined one.
+
+```
+/scope add 10.0.0.0/24            a CIDR range
+/scope add target.example.com     an exact host
+/scope add *.lab.example.com      a wildcard domain
+/scope                            list the current scope
+/scope remove <n|target>          remove one
+/scope clear                      remove all (asks first)
+```
+
+Once a scope exists, restricted mode's gate also flags any `run_command` that mentions an IP or hostname outside it - same password prompt as any other dangerous action, with the specific target named so you can tell at a glance whether it's a typo, a hallucinated host, or a legitimate new target you just forgot to add. Like the rest of the gate, this reads the command text (a best-effort check, not network-level enforcement), and it's independent of `post_to_board`/`save_note` - posting to the board is never gated, no matter what's in scope.
 
 ### Getting deleted files back
 
@@ -267,6 +284,7 @@ data/projects/<folder>-<hash>/
   project.json                        which folder this project belongs to
   notes.md                            project notes: every chat in the project sees them
   board.txt                           shared agent board: recent posts, every chat sees them
+  scope.txt                           authorized targets for security testing - see Scope
   agents/<name>.json                  agent profiles (model, tools, persona) - see Agents
   trash/<id>/                         deleted files and folders, restorable for TRASH_DAYS
   chats/<id>/log.txt                  full transcript: append-only, never shortened
@@ -329,6 +347,7 @@ ollama_workspace/
   session.py             picking, opening and switching chats and models
   commands.py            /commands, /cd and !command
   agents.py              agent profiles: model + tools + persona presets, /agent
+  scope.py               authorized targets for security testing, /scope
   tools/                 the tools the model can call
     base.py              shared: workspace limits, hidden paths, approvals
     browse.py            list_dir, list_files, find_files, search_files, file_outline, read_file
@@ -337,7 +356,7 @@ ollama_workspace/
     shell.py             run_command
     history.py           search_history, save_note, post_to_board
     dispatch.py          dispatch_to_agent, list_agents
-  guard.py               restricted / unleashed modes, dangerous-command checks, password
+  guard.py               restricted / unleashed modes, dangerous-command and scope checks, password
   trash.py               deleted files: move to trash, list, restore
   memory.py              projects, chats, log and compression
   models.py              installed models, capabilities, model switching
