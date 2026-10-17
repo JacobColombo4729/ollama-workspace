@@ -12,6 +12,9 @@ class State:
     # whether file changes (and, in unleashed mode, commands) ask first; set at startup
     # from the mode and AUTO_APPROVE, and switched with /approve
     ask_first = True
+    # None = no restriction (all of TOOLS); otherwise the tool names an active agent
+    # profile limits the model to (see agents.py)
+    active_names: list[str] | None = None
 
 
 state = State()

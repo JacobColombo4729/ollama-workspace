@@ -5,7 +5,7 @@ import pathlib
 import shutil
 import subprocess
 
-from . import config, guard, memory, models, tools, trash
+from . import agents, config, guard, memory, models, tools, trash
 from .config import TRASH_DAYS
 from .console import ask
 from .prompts import HELP
@@ -14,9 +14,9 @@ from .stream import describe_thinking
 from .tools import SHELL
 
 
-COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/models", "/model", "/think",
-            "/notes", "/trash", "/restore", "/mode", "/approve", "/cd", "/unlock", "/lock",
-            "/help")
+COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/agent", "/models", "/model",
+            "/think", "/notes", "/trash", "/restore", "/mode", "/approve", "/cd", "/unlock",
+            "/lock", "/help")
 
 
 def handle_command(q: str, project) -> None:
@@ -43,6 +43,8 @@ def handle_command(q: str, project) -> None:
         print(f"Renamed to: {arg}")
     elif cmd == "/delete":
         delete_chats(project, arg)
+    elif cmd == "/agent":
+        handle_agent(project, arg)
     elif cmd == "/models":
         models.refresh()
         models.print_installed()
@@ -65,8 +67,8 @@ def handle_command(q: str, project) -> None:
         print(f"\033[2m[edit by hand: {path}]\033[0m")
     elif cmd == "/mode":
         print(guard.describe())
-        print("\033[2m[set per computer: setx OCHAT_MODE restricted|unleashed, then open a "
-              "new terminal]\033[0m")
+        print("\033[2m[restricted is the default; set per computer with setx OCHAT_MODE "
+              "unleashed, then open a new terminal, to change it]\033[0m")
     elif cmd == "/trash" and arg.lower() == "empty":
         items = trash.entries(project)
         if items and ask(f"Permanently delete {len(items)} trashed item(s)? [y/N]: ").lower() in ("y", "yes"):
@@ -145,6 +147,55 @@ def delete_chats(project, arg: str) -> None:
         memory.active = None
         remaining = memory.list_chats(project)
         switch_to(remaining[0] if remaining else memory.Chat.create(project))
+
+
+def handle_agent(project, arg: str) -> None:
+    """/agent: list agents and ask which to switch to. /agent new <name>: create one.
+    /agent delete <n|name>: remove one. /agent none: go back to this chat's own model and
+    full tools. /agent <n|name>: switch to it (remembered for this chat, like /model)."""
+    sub, _, rest = arg.partition(" ")
+    if sub.lower() == "new":
+        name = clean_name(rest) or ask("Name for the new agent: ")
+        if name:
+            models.refresh()
+            agents.create_agent(project, name, models.pick)
+        return
+    if sub.lower() == "delete":
+        existing = agents.list_agents(project)
+        target = clean_name(rest)
+        if not target:
+            agents.print_agents(existing)
+            target = ask("Agent number or name to delete: ")
+        if target and (agent := agents.find_agent(existing, target)):
+            if ask(f"Delete agent '{agent.name}'? [y/N]: ").lower() in ("y", "yes"):
+                agents.delete_agent(agent)
+                print(f"Deleted agent '{agent.name}'.")
+        return
+    if sub.lower() == "none":
+        agents.activate(None)
+        memory.active.meta["agent"] = ""  # explicit, so resuming this chat stays agent-less
+        memory.active.save()
+        print("Agent cleared; this chat uses its own model and full tools again.")
+        return
+    existing = agents.list_agents(project)
+    if not arg:
+        agents.print_agents(existing)
+        arg = ask("Agent number, name, 'new <name>', or 'none' to clear: ")
+        if arg:
+            handle_agent(project, arg)
+        return
+    if not (agent := agents.find_agent(existing, arg)):
+        return
+    agents.activate(agent)
+    memory.active.meta["agent"] = agent.name
+    memory.active.save()
+    models.refresh()
+    if agent.model in models.installed:
+        set_model(agent.model)
+    else:
+        print(f"\033[2m[agent '{agent.name}' uses {agent.model}, which isn't installed; "
+              "keeping the current model]\033[0m")
+    print(f"Agent: {agent.name}" + (f" - {agent.persona}" if agent.persona else ""))
 
 
 def unlock() -> None:

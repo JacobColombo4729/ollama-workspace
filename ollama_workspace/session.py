@@ -2,7 +2,7 @@
 choosing the model."""
 import shutil
 
-from . import memory, models
+from . import agents, memory, models
 from .stream import describe_thinking
 
 
@@ -47,6 +47,14 @@ def switch_to(chat, adopt_model: bool = True) -> None:
             print(f"\033[2m[this chat used {want}, which isn't installed]\033[0m")
     if models.current is not None:
         chat.compact_if_needed()  # handles an already-large log (needs a model)
+    # "agent" absent: this chat has no opinion, so whatever agent is already active carries
+    # over (like a new chat keeps the current model). "" (/agent none) explicitly clears it.
+    if "agent" in chat.meta:
+        want_agent = chat.meta["agent"]
+        agent = agents.named(agents.list_agents(chat.project), want_agent) if want_agent else None
+        if want_agent and not agent:
+            print(f"\033[2m[this chat used agent '{want_agent}', which no longer exists]\033[0m")
+        agents.activate(agent)
 
 
 def clean_name(text: str) -> str:

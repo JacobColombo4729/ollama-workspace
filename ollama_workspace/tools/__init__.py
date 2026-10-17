@@ -24,8 +24,11 @@ TOOLS = [list_dir, list_files, find_files, search_files, file_outline, read_file
 
 
 def active() -> list:
-    """The tools the model gets in the current mode."""
-    return TOOLS
+    """The tools the model gets: all of TOOLS, unless an active agent profile narrows it
+    (see agents.py)."""
+    if state.active_names is None:
+        return TOOLS
+    return [t for t in TOOLS if t.__name__ in state.active_names]
 
 
 def run_tool(call) -> str:

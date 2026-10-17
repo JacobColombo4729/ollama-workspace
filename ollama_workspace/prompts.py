@@ -50,6 +50,8 @@ HELP = """Commands:
   /resume <n|name>    switch chats by number from /chats or by name
   /rename <name>      rename the current chat
   /delete <n|name>    permanently delete a chat (/delete all: every chat in this project)
+  /agent [n|name]     switch to an agent profile (model + tools + persona) for this chat
+                      /agent new <name> to create one, /agent none to clear, /agent delete
   /models             list installed Ollama models
   /model [n|name]     switch model for this chat (no argument: pick from a list)
   /think [level]      how much the model reasons first: off, low, medium, high
