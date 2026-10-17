@@ -7,12 +7,16 @@ data/projects/<project>/agents/<name>.json   one per agent, in that project
 Activating an agent (/agent <name>) sets `active` and narrows tools.state.active_names for
 the rest of the chat; it's remembered per chat (chat.meta["agent"]) the same way the model
 is, so resuming a chat restores which agent (if any) was active.
+
+dispatch_to_agent (tools/dispatch.py) uses agent_chat() to give each agent its own
+persistent chat in the project, separate from whichever chat dispatched to it, so an
+agent's work and context build up across dispatches instead of starting fresh each time.
 """
 import json
 import re
 from pathlib import Path
 
-from . import tools
+from . import memory, tools
 from .console import ask, ask_message
 
 active: "Agent | None" = None  # the agent governing the current chat, if any
@@ -104,6 +108,19 @@ def activate(agent: "Agent | None") -> None:
     global active
     active = agent
     tools.state.active_names = None if (agent is None or agent.all_tools) else agent.tool_names
+
+
+def agent_chat(project: Path, agent: "Agent") -> "memory.Chat":
+    """This agent's own persistent chat in this project - created the first time it's
+    dispatched to (see tools/dispatch.py) and reused after that, so its work and context
+    build up across dispatches instead of starting fresh every time."""
+    chat_id = agent.meta.get("chat")
+    if chat_id and (project / "chats" / chat_id).is_dir():
+        return memory.Chat(project / "chats" / chat_id)
+    chat = memory.Chat.create(project, title=f"agent:{agent.name}")
+    agent.meta["chat"] = chat.dir.name
+    agent.save()
+    return chat
 
 
 _CODE_WORDS = ("code", "coding", "program", "implement", "develop", "build", "debug",

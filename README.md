@@ -162,8 +162,20 @@ The model works like a coding agent, with these tools:
 | `make_dir`, `move_path`, `delete_path` | Create folders, move or rename, delete files or folders (to the trash) | yes |
 | `list_deleted`, `restore_deleted` | See and bring back deleted files and folders | restoring |
 | `run_command` | Run a shell command in the workspace (PowerShell on Windows): tests, scripts, git, installs | depends on the [mode](#modes-restricted-and-unleashed) |
+| `dispatch_to_agent`, `list_agents` | Hand a task to another [agent](#agents) in this project and wait for its result | |
 
 The model sees each command's output and exit code. A command is stopped after `COMMAND_TIMEOUT` seconds and can't prompt for input. "Asks first" for file changes can be turned off with `AUTO_APPROVE`.
+
+### Agents
+
+An agent profile (`/agent new <name>`) pins a chat to one model, one tool list, and a persona you write yourself - that persona is what actually sets the balance between narrating in text and just showing code; it's a prompting choice, not a fixed category, so "mostly text, call out code when it matters" and "coding only, a one-line status before each step" are both just descriptions you type.
+
+Giving an agent the `dispatch_to_agent` tool lets it hand a task to another agent and wait for the result - a text-focused agent can delegate implementation to a coding one, and that agent can delegate further to another agent in turn, since dispatching is just a normal tool call like any other. A few things keep it predictable:
+
+- **Sequential, not concurrent.** Dispatching blocks until that agent finishes; nothing runs in parallel. One agent working on your files at a time.
+- **Each agent gets its own persistent chat** in the project (`agent:<name>` in `/chats`), separate from whoever dispatched to it, so its work and context build up across dispatches instead of starting over each time.
+- **No loops.** An agent can't dispatch to itself, directly or through a longer chain (A → B → A is caught, not just A → A), and a chain can only go `MAX_DISPATCH_DEPTH` (3) agents deep before it's refused.
+- Mode, approvals and the password gate apply exactly the same inside a dispatched agent's turn as anywhere else - delegating a task is never a way around them.
 
 ### Modes: restricted and unleashed
 
@@ -303,11 +315,13 @@ OLLAMA_KV_CACHE_TYPE=q8_0
 chat.py                  entry point
 ochat.bat / ochat        launchers for Windows / macOS and Linux
 ollama_workspace/
-  chat.py                the chat loop: read a message, run the model and its tools, save
+  chat.py                startup: parse args, pick the chat/model, the input loop
+  turn.py                run one message to completion: tool loop, interrupts, logging
   prompts.py             system prompts and the /help text
   stream.py              requests to the model: context trimming, streaming, Ctrl+C, thinking
   session.py             picking, opening and switching chats and models
   commands.py            /commands, /cd and !command
+  agents.py              agent profiles: model + tools + persona presets, /agent
   tools/                 the tools the model can call
     base.py              shared: workspace limits, hidden paths, approvals
     browse.py            list_dir, list_files, find_files, search_files, file_outline, read_file
@@ -315,6 +329,7 @@ ollama_workspace/
     deleting.py          delete_path, list_deleted, restore_deleted
     shell.py             run_command
     history.py           search_history, save_note
+    dispatch.py          dispatch_to_agent, list_agents
   guard.py               restricted / unleashed modes, dangerous-command checks, password
   trash.py               deleted files: move to trash, list, restore
   memory.py              projects, chats, log and compression

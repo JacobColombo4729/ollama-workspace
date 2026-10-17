@@ -29,6 +29,8 @@ AUTO_APPROVE = False       # restricted mode: True = edit, create, move and dele
                            # (see guard.py; the mode comes from OCHAT_MODE, default restricted)
 COMMAND_TIMEOUT = 300      # default seconds before a shell command is stopped
 MAX_COMMAND_TIMEOUT = 3600 # the most the model may ask for (run_command's timeout)
+MAX_DISPATCH_DEPTH = 3     # how many agents deep dispatch_to_agent may chain (A->B->C->...)
+                           # before refusing to go further; also catches A->B->A loops
 WEB_TIMEOUT = 20           # seconds for web_search / fetch_url / http_request (unleashed)
 TRASH_DAYS = 30            # deleted files stay restorable this long (see /trash)
 WORKSPACE = pathlib.Path.cwd().resolve()  # the codebase the model may edit: where you launch
