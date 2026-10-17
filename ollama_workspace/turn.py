@@ -8,6 +8,7 @@ delegated subtask. Both just talk to whichever chat/model/agent happens to be ac
 dispatched subtask gets logging, memory and context handling for free - no special-casing.
 """
 import sys
+import time
 
 import ollama
 
@@ -17,6 +18,7 @@ from .config import MAX_TOOL_STEPS, REPLY_LIMIT, UNLEASHED_TOOL_STEPS
 from .console import ask_message
 from .stream import build_messages, continuation, fit_context, interjection, stream_step
 from .tools import changed, run_tool
+from .tools.base import state
 
 
 def run_turn(q: str) -> str:
@@ -71,6 +73,8 @@ def run_turn(q: str) -> str:
             for call in calls:
                 messages.append({"role": "tool", "content": run_tool(call),
                                  "tool_name": call.function.name})
+            if state.pace:  # /pace: give a human watching time to read each step
+                time.sleep(state.pace)
         else:
             print(f"[stopped after {max_steps} tool steps]")
     except KeyboardInterrupt:  # Ctrl+C outside streaming, e.g. at an edit approval prompt

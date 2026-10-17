@@ -15,6 +15,10 @@ class State:
     # None = no restriction (all of TOOLS); otherwise the tool names an active agent
     # profile limits the model to (see agents.py)
     active_names: list[str] | None = None
+    # seconds to pause after each tool step, so a human watching (especially an unleashed,
+    # largely-unattended run) has time to actually read each line before the next one
+    # fires; 0 (default) means no artificial delay. Set with /pace.
+    pace: float = 0
 
 
 state = State()
