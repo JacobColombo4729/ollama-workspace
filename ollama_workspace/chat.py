@@ -167,7 +167,11 @@ def main() -> None:
             print("\033[0m\n[stopped]")
             done_reason = "stopped"
         except ollama.ResponseError as e:
-            print(f"\033[0m\n[model error: {e.error}] - try /model to switch models")
+            # the error text comes from the model/server and may contain characters the
+            # Windows console's codepage can't print - replace them rather than crash
+            safe = str(e.error).encode(sys.stdout.encoding or "utf-8", "replace") \
+                .decode(sys.stdout.encoding or "utf-8")
+            print(f"\033[0m\n[model error: {safe}] - try /model to switch models")
             continue  # nothing to save
         reply = "\n".join(replies)
         print()
