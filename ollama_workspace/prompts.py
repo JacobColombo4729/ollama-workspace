@@ -58,6 +58,7 @@ HELP = """Commands:
                       (less = faster; no argument: show the current level)
   /notes              show the project notes (shared by all chats here)
   /board              show the shared agent board (recent posts, seen by every agent here)
+  /findings           show recorded security findings (post_finding), seen by every agent
   /scope [add|remove|clear] <target>   authorized targets for security testing; empty by
                       default (nothing checked) - add an IP, CIDR, hostname, or *.domain
   /trash              list deleted files and folders that can be restored
@@ -66,6 +67,8 @@ HELP = """Commands:
   /unlock, /lock      let the model edit this chat tool's own code for this session
                       (restricted mode asks your password), or stop it again
   /approve [on|off]   ask before file changes (and, in unleashed mode, commands), or don't
+  /pace [seconds]     pause this long after each tool step, so you can actually read an
+                      unattended run as it happens (0 or no argument: off / show current)
   /cd [folder]        switch the workspace (and its project chats) without restarting
   !<command>          run a shell command yourself in the workspace, e.g. !git status
   \"\"\"                 type a multi-line message, ended by another \"\"\" line

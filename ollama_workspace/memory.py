@@ -8,6 +8,9 @@ data/projects/<folder>-<hash>/       one per workspace folder
                                       log.txt, kept only as far back as the budget allows
     scope.txt                        authorized targets for security testing (see scope.py);
                                       empty by default, checked only if you've defined one
+    findings.txt                     security findings (post_finding), same recent-feed
+                                      treatment as board.txt but kept separate from it -
+                                      a finding isn't the same as routine activity chatter
     chats/<id>/log.txt               full transcript, append-only, never shortened
     chats/<id>/chat.json             title, timestamps, and summaries of older log
 
@@ -34,6 +37,17 @@ EXCHANGE_START = re.compile(r"\n(?=\[\d{4}-\d\d-\d\d \d\d:\d\d\] USER: )")
 active: "Chat | None" = None  # the chat in use; tools read it
 
 
+def _tail_feed(path: Path, budget: int, label: str) -> str:
+    """A recent-activity file's content (board.txt/findings.txt), cut to `budget` chars
+    by keeping the END, not the start - unlike notes, these grow by appending, so the
+    useful part once they outgrow the budget is the most recent entries, not the oldest."""
+    text = path.read_text("utf-8").strip() if path.exists() else ""
+    if len(text) > budget:
+        start = text.find("\n[", len(text) - budget)  # begin at a full line
+        text = f"...[earlier {label} left out]" + text[start if start != -1 else -budget:]
+    return text
+
+
 def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -48,6 +62,7 @@ def project_dir(workspace: Path) -> Path:
     (d / "notes.md").touch()
     (d / "board.txt").touch()
     (d / "scope.txt").touch()
+    (d / "findings.txt").touch()
     return d
 
 
@@ -134,18 +149,16 @@ class Chat:
         self.save()
 
     def memory_prompt(self, budget: int, searchable: bool) -> str:
-        """Notes + the shared board + summaries + recent log, cut to about `budget` chars
-        so small-context models still fit. What's cut stays on disk (and in
-        search_history for notes/log; the board only ever keeps its most recent posts)."""
+        """Notes + the shared board/findings + summaries + recent log, cut to about
+        `budget` chars so small-context models still fit. What's cut stays on disk (and
+        in search_history for notes/log; the board/findings only ever keep their most
+        recent entries)."""
         notes = (self.project / "notes.md").read_text("utf-8").strip()
         if len(notes) > budget // 4:
             notes = notes[:budget // 4] + "\n...[notes cut off to fit the model's context]"
-        board = (self.project / "board.txt").read_text("utf-8").strip()
-        board_budget = budget // 6
-        if len(board) > board_budget:  # a recent-activity feed: keep the end, not the
-            start = board.find("\n[", len(board) - board_budget)  # start; begin at a full line
-            board = "...[earlier posts left out]" + board[start if start != -1 else -board_budget:]
-        left = budget - len(notes) - len(board)
+        board = _tail_feed(self.project / "board.txt", budget // 6, "posts")
+        findings = _tail_feed(self.project / "findings.txt", budget // 6, "findings")
+        left = budget - len(notes) - len(board) - len(findings)
         shown, used = [], 0
         for s in reversed(self.meta["summaries"]):  # newest summaries first
             block = f"[{s['from']} to {s['to']}]\n{s['text']}"
@@ -167,6 +180,7 @@ class Chat:
             f"with this user. Use it naturally; don't recite it unless asked.{recall}\n\n"
             f"=== PROJECT NOTES (shared by all chats in this project) ===\n{notes or '(none)'}\n\n"
             f"=== SHARED BOARD (recent updates from every agent in this project) ===\n{board or '(none yet)'}\n\n"
+            f"=== SECURITY FINDINGS (recent, from every agent in this project) ===\n{findings or '(none yet)'}\n\n"
             f"=== SUMMARIES OF OLDER CONVERSATION ===\n{summaries or '(none yet)'}\n\n"
             f"=== RECENT CONVERSATION LOG ===\n{recent or '(none yet)'}"
         )

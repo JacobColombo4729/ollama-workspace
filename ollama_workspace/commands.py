@@ -15,8 +15,8 @@ from .tools import SHELL
 
 
 COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/agent", "/models", "/model",
-            "/think", "/notes", "/board", "/scope", "/trash", "/restore", "/mode", "/approve",
-            "/cd", "/unlock", "/lock", "/help")
+            "/think", "/notes", "/board", "/findings", "/scope", "/trash", "/restore", "/mode",
+            "/approve", "/pace", "/cd", "/unlock", "/lock", "/help")
 
 
 def handle_command(q: str, project) -> None:
@@ -70,6 +70,11 @@ def handle_command(q: str, project) -> None:
         print(path.read_text("utf-8").strip() or "(nothing posted yet)")
         print(f"\033[2m[every agent in this project sees recent posts automatically; "
               f"edit by hand: {path}]\033[0m")
+    elif cmd == "/findings":
+        path = project / "findings.txt"
+        print(path.read_text("utf-8").strip() or "(no findings recorded yet)")
+        print(f"\033[2m[every agent in this project sees recent findings automatically; "
+              f"edit by hand: {path}]\033[0m")
     elif cmd == "/scope":
         handle_scope(project, arg)
     elif cmd == "/mode":
@@ -112,6 +117,16 @@ def handle_command(q: str, project) -> None:
               f"(/approve {'off' if tools.state.ask_first else 'on'} to change; this chat session only).")
         if guard.restricted():
             print("\033[2m[dangerous commands always need your password]\033[0m")
+    elif cmd == "/pace":
+        if arg:
+            try:
+                tools.state.pace = max(0.0, float(arg))
+            except ValueError:
+                print("Use /pace <seconds> (0 to turn off).")
+                return
+        print(f"Pausing {tools.state.pace}s after each tool step (/pace 0 to turn off; "
+              "this chat session only)." if tools.state.pace else
+              "No pause between tool steps (/pace <seconds> to add one, e.g. /pace 1.5).")
     elif cmd == "/cd":
         return change_workspace(q.partition(" ")[2].strip().strip("\"'"))
     elif cmd == "/unlock":

@@ -97,10 +97,12 @@ python chat.py --workspace path/to/project    use another folder as the workspac
 | `/agent [n\|name]` | Switch this chat to an agent profile (its own model, tool access, and persona). `/agent new <name>` creates one - you describe it in your own words, which drives how much it narrates vs. just shows code; `/agent delete <n\|name>` removes one; `/agent none` goes back to this chat's own model and full tools |
 | `/notes` | Show the project notes and where to edit them |
 | `/board` | Show the shared [agent board](#agents) and where to edit it |
+| `/findings` | Show recorded [security findings](#scope-authorized-targets-for-security-testing) and where to edit them |
 | `/scope [add\|remove\|clear] <target>` | Authorized targets for [security testing](#scope-authorized-targets-for-security-testing); empty by default (nothing checked) |
 | `/mode` | Show this computer's mode and what it allows |
 | `/unlock`, `/lock` | Let the model see and edit ochat's own code for this session (restricted mode asks your password), or stop it again. Chats and the password stay off limits |
 | `/approve [on\|off]` | Ask before file changes (in unleashed mode, also commands), or stop asking. Lasts for this session |
+| `/pace [seconds]` | Pause this long after each tool step, so you can actually follow an otherwise-unattended run as it happens. `0` or no argument: off / show the current value |
 | `/cd [folder]` | Switch the workspace without restarting; opens that folder's latest chat |
 | `!<command>` | Run a shell command yourself in the workspace, e.g. `!git status`. Its output isn't sent to the model |
 | `"""` | Type a multi-line message by hand; end it with another `"""` line. Pasting needs nothing special: pasted text, line breaks included, never sends by itself, so you can keep typing after it; only an Enter you type sends. Up/Down recalls earlier messages |
@@ -208,7 +210,7 @@ Password (Enter to cancel):
 | Hidden or inline code (`-EncodedCommand`, base64, `iex`, `python -c`, `cmd /c`, a nested `powershell`/`bash -c`) | You can't see what it really does, and it gets around these checks |
 | `setx`, `OCHAT_MODE`, the tool's own code or `data/`, git hooks and `core.hooksPath` | Could switch these protections off |
 | Changing or deleting files outside the workspace, formatting disks, shutting down | Damage beyond the project |
-| A command mentioning a target outside this project's [scope](#scope-authorized-targets-for-security-testing), if one is defined | Catches a typo'd IP or a hallucinated host before it runs, not after |
+| A command mentioning a target outside this project's [scope](#scope-authorized-targets-for-security-testing), if one is defined | Catches a typo'd IP or a hallucinated host before it runs, not after. Refused outright (not password-askable) in unleashed mode |
 
 Restricted mode also:
 - **refuses to start as Administrator**, so commands never inherit admin rights;
@@ -233,7 +235,26 @@ For authorized pentesting/red-team work, a project can define its **scope** - th
 /scope clear                      remove all (asks first)
 ```
 
-Once a scope exists, restricted mode's gate also flags any `run_command` that mentions an IP or hostname outside it - same password prompt as any other dangerous action, with the specific target named so you can tell at a glance whether it's a typo, a hallucinated host, or a legitimate new target you just forgot to add. Like the rest of the gate, this reads the command text (a best-effort check, not network-level enforcement), and it's independent of `post_to_board`/`save_note` - posting to the board is never gated, no matter what's in scope.
+Once a scope exists, any `run_command` that mentions an IP or hostname outside it gets caught - but the consequence depends on the mode, since unleashed is built for runs nobody may be watching:
+
+- **Restricted**: the same password prompt as any other dangerous action, with the specific target named so you can tell at a glance whether it's a typo, a hallucinated host, or a legitimate new target you just forgot to add.
+- **Unleashed**: refused outright, no prompt - a prompt nobody's there to answer is the same as the agent just stopping, so this is a hard stop instead of a question.
+
+Like the rest of the gate, this reads the command text (a best-effort check, not network-level enforcement). It's independent of `post_to_board`/`save_note`/`post_finding` - logging activity or a finding is never gated, no matter what's in scope; only *attempting* an action against an out-of-scope target is.
+
+One check that **can't be approved around at all, in either mode**: a command that touches `data/` itself - the saved chats, password, scope, and agent profiles. The file tools already can never see `data/`; this closes the same gap for `run_command`, which otherwise has no path restriction of its own and could rewrite its own scope list via shell redirection, silently defeating the whole protection.
+
+### Findings: recording results separately from the board
+
+`post_finding(target, severity, description)` records a security finding - separate from `post_to_board`'s routine activity narration, so an engagement's actual deliverable doesn't get lost in "scanning host X now" chatter. Severity is one of `info`/`low`/`medium`/`high`/`critical`. Like the board, recent findings are shown automatically to every agent in the project (`/findings` to see them yourself), and older ones drop out of what the model sees once they no longer fit the context budget - they still live in `findings.txt` on disk.
+
+### Monitoring and stopping an unleashed run
+
+Unleashed is meant to run with little or no supervision, which cuts both ways: it's also easy for a long autonomous run to scroll past faster than you can actually read it. A few things help:
+
+- **`/pace <seconds>`** pauses after each tool step, so you can watch it happen instead of catching up after the fact. `0` (the default) means no artificial delay, for runs you're not actively watching.
+- **Ctrl+C actually stops it** - including anything a command started. `run_command` runs each command in its own process group and tears down the whole tree on interrupt (or on timeout), not just the one process it launched; a port scan or a listener it started doesn't outlive the command that launched it.
+- The [board](#agents) and [findings](#findings-recording-results-separately-from-the-board) give you a readable trail of what happened even if you weren't watching live - check `/board` and `/findings` after the fact, or tail `board.txt`/`findings.txt` from another window while it runs.
 
 ### Getting deleted files back
 
@@ -285,6 +306,7 @@ data/projects/<folder>-<hash>/
   notes.md                            project notes: every chat in the project sees them
   board.txt                           shared agent board: recent posts, every chat sees them
   scope.txt                           authorized targets for security testing - see Scope
+  findings.txt                        security findings (post_finding) - see Findings
   agents/<name>.json                  agent profiles (model, tools, persona) - see Agents
   trash/<id>/                         deleted files and folders, restorable for TRASH_DAYS
   chats/<id>/log.txt                  full transcript: append-only, never shortened
@@ -293,9 +315,9 @@ data/projects/<folder>-<hash>/
 
 A project is identified by its full folder path, so two folders that share a name stay separate.
 
-**Each turn the model sees** the project notes, the shared agent board, the dated summaries of older conversation, and the recent raw log of the current chat. All of it is trimmed to `MEMORY_SHARE` (50%) of the model's context window.
+**Each turn the model sees** the project notes, the shared agent board, recorded security findings, the dated summaries of older conversation, and the recent raw log of the current chat. All of it is trimmed to `MEMORY_SHARE` (50%) of the model's context window.
 
-`notes.md` (`save_note`) is for sparse, lasting facts - decisions, conventions, preferences - and keeps everything ever saved. `board.txt` (`post_to_board`, `/board`) is for frequent status updates between agents and only keeps as many recent posts as fit the context budget; older ones drop off the front (they still live in the file on disk, just not in what the model sees) rather than getting summarized like the main log.
+`notes.md` (`save_note`) is for sparse, lasting facts - decisions, conventions, preferences - and keeps everything ever saved. `board.txt` (`post_to_board`, `/board`) and `findings.txt` (`post_finding`, `/findings`) are both frequent, recent-activity feeds that only keep as many entries as fit the context budget - older ones drop off the front (they still live in the file on disk, just not in what the model sees) rather than getting summarized like the main log. They're kept separate on purpose: the board is routine narration, findings are the actual deliverable.
 
 **How compression avoids losing memory:**
 
@@ -356,6 +378,7 @@ ollama_workspace/
     shell.py             run_command
     history.py           search_history, save_note, post_to_board
     dispatch.py          dispatch_to_agent, list_agents
+    pentest.py           post_finding
   guard.py               restricted / unleashed modes, dangerous-command and scope checks, password
   trash.py               deleted files: move to trash, list, restore
   memory.py              projects, chats, log and compression
