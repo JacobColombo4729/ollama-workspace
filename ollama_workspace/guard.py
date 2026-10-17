@@ -61,11 +61,19 @@ DANGEROUS = [
     (r"\brunas\b|-Verb\s+['\"]?RunAs|\bg?sudo\b",
      "asks for Administrator rights. With them a command can change anything on the "
      "computer, including security settings and other users' files."),
+    # write/enable verbs only, same reasoning as the registry check below - "crontab -l",
+    # "cat ~/.bashrc" or "ls ~/Library/LaunchAgents" are common and harmless; only adding
+    # a job, loading a launch agent, enabling a service, or writing into a profile file
+    # needs your password.
     (r"\bschtasks\b|Register-ScheduledTask|New-ScheduledTask|New-Service|"
      r"\bsc(\.exe)?\s+(create|config)\b|Register-WmiEvent|__EventFilter|"
-     r"Start Menu[\\/]Programs[\\/]Startup|shell:startup|\$PROFILE",
-     "sets something up to run automatically (at startup, on a schedule, or in every "
-     "PowerShell session). That's how malware survives a restart."),
+     r"Start Menu[\\/]Programs[\\/]Startup|shell:startup|\$PROFILE|"
+     r"\bcrontab\b(?!\s*-l\b)|[\\/]etc[\\/]cron|"
+     r"\blaunchctl\b\s+(load|bootstrap|enable)|systemctl\s+(enable|start)|"
+     r">>?\s*[\"']?(~|\$HOME|\$env:HOME)?[\\/]?\.?(bashrc|bash_profile|zshrc|zprofile|profile)\b|"
+     r"\bsed\b.*-i.*\.(bashrc|bash_profile|zshrc|zprofile)\b",
+     "sets something up to run automatically (at startup, on a schedule, in every shell "
+     "session, or in every PowerShell session). That's how malware survives a restart."),
     # write verbs only - reading the registry (reg query, Get-ItemProperty, Test-Path
     # HKLM:\...) is common and harmless; only changing it needs your password.
     (r"\breg(\.exe)?\s+(add|delete|import|load|restore)\b|(New|Set|Remove)-ItemProperty",
@@ -73,14 +81,22 @@ DANGEROUS = [
      "and how Windows behaves."),
     (r"Set-MpPreference|Add-MpPreference|\bnetsh\b.*\b(advfirewall|firewall)\b|"
      r"(Set|New|Remove|Disable)-NetFirewall|\bbcdedit\b|Set-ExecutionPolicy|"
-     r"\bvssadmin\b|\bwbadmin\b|\bwevtutil\b.*\bcl\b|Clear-EventLog|\bcipher\b.*/w",
-     "changes Windows security settings, backups or logs (Defender, firewall, boot, "
-     "script policy). Disabling these is a typical first step of an attack."),
-    (r"\bnet(\.exe)?\s+(user|localgroup)\b|(New|Add|Set)-Local(User|GroupMember)",
-     "creates or changes user accounts or their permissions."),
+     r"\bvssadmin\b|\bwbadmin\b|\bwevtutil\b.*\bcl\b|Clear-EventLog|\bcipher\b.*/w|"
+     r"\bufw\s+disable|\biptables\b.*(-F|--flush)|\bpfctl\b.*-d|\bcsrutil\s+disable|"
+     r"\bspctl\s+--master-disable|\bsetenforce\s+0|journalctl\b.*--vacuum",
+     "changes security settings, backups or logs (Defender/firewall/ufw/iptables, boot or "
+     "script policy, SIP, Gatekeeper, SELinux, logs). Disabling these is a typical first "
+     "step of an attack."),
+    (r"\bnet(\.exe)?\s+(user|localgroup)\b|(New|Add|Set)-Local(User|GroupMember)|"
+     r"\buser(add|del|mod)\b|\bgroup(add|del|mod)\b|\bvisudo\b|[\\/]etc[\\/]sudoers|"
+     r"\bdscl\b|\bsysadminctl\b|\bdseditgroup\b",
+     "creates or changes user accounts, groups, or who's allowed to use sudo."),
     (r"\bcmdkey\b|\bvaultcmd\b|mimikatz|\blsass\b|[\\/]SAM\b|\.ssh\b|\bid_(rsa|ed25519|ecdsa)\b|"
-     r"Login Data|[\\/]Cookies\b|\.aws[\\/]|\.git-credentials|ConvertFrom-SecureString",
-     "touches saved passwords, keys or browser logins, which could be stolen."),
+     r"Login Data|[\\/]Cookies\b|\.aws[\\/]|\.git-credentials|ConvertFrom-SecureString|"
+     r"\bsecurity\s+(find-\w+-password|dump-keychain|unlock-keychain)\b|"
+     r"[\\/]etc[\\/]shadow\b|\.netrc\b|\bsecret-tool\b",
+     "touches saved passwords, keys or browser logins (including the macOS Keychain, "
+     "/etc/shadow, or .netrc), which could be stolen."),
     (r"-(e|ec|en|enc|enco|encodedcommand)\s+[A-Za-z0-9+/=]{16,}|FromBase64String|"
      r"\bbase64\s+(-d|--decode)\b|\b(iex|Invoke-Expression)\b|\[ScriptBlock\]::Create",
      "runs hidden or encoded code, so you can't read what it really does."),

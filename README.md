@@ -195,13 +195,13 @@ Password (Enter to cancel):
 
 | Needs the password | Why |
 |---|---|
-| Downloads (`curl`, `iwr`, `wget`, `certutil`, `bitsadmin`, …), especially download-and-run | Malware comes in this way, and the same tools can upload your files |
+| Download-and-run (`curl`/`iwr`/`wget`/… piped into a shell, or saved then executed) | Malware's most common way in. A plain download on its own isn't gated - that's normal dev work |
 | Admin rights (`runas`, `-Verb RunAs`, `sudo`) | An admin can change anything on the computer |
-| Auto-start (scheduled tasks, services, Startup folder, `$PROFILE`) and registry changes | How malware survives a restart |
-| Defender, firewall, boot, execution policy, backups, event logs | Disabling defenses is a typical first step of an attack |
-| User accounts (`net user`, `New-LocalUser`) | Creating or promoting accounts |
-| Saved passwords and keys (`.ssh`, browser logins, `cmdkey`, `.aws`) | Credential theft |
-| Hidden or inline code (`-EncodedCommand`, base64, `iex`, `python -c`, `cmd /c`, a nested `powershell`) | You can't see what it really does, and it gets around these checks |
+| Auto-start - scheduled tasks/services, Startup folder/`$PROFILE`, `crontab`, `launchctl load`, `systemctl enable`, or writing into `.bashrc`/`.zshrc`/`.profile` - and registry changes | How malware survives a restart. Reading these (`crontab -l`, `cat ~/.bashrc`) isn't gated |
+| Defender, firewall (incl. `ufw`, `iptables`, `pfctl`), boot, execution policy, backups, event logs, SIP (`csrutil`), Gatekeeper (`spctl`), SELinux (`setenforce`) | Disabling defenses is a typical first step of an attack |
+| User accounts/groups (`net user`, `New-LocalUser`, `useradd`, `usermod`, `dscl`) or `sudoers`/`visudo` | Creating, promoting, or granting sudo to an account |
+| Saved passwords and keys (`.ssh`, browser logins, `cmdkey`, `.aws`, the macOS Keychain, `/etc/shadow`, `.netrc`) | Credential theft |
+| Hidden or inline code (`-EncodedCommand`, base64, `iex`, `python -c`, `cmd /c`, a nested `powershell`/`bash -c`) | You can't see what it really does, and it gets around these checks |
 | `setx`, `OCHAT_MODE`, the tool's own code or `data/`, git hooks and `core.hooksPath` | Could switch these protections off |
 | Changing or deleting files outside the workspace, formatting disks, shutting down | Damage beyond the project |
 
