@@ -20,6 +20,9 @@ from .config import DATA_DIR, ROOT
 
 MODES = ("restricted", "unleashed")
 mode = ""  # set by init()
+# /unlock: let the model see and edit this tool's own code for the rest of the session
+# (restricted mode asks the password first). Chat data and the password stay off limits.
+self_edit = False
 
 PASSWORD_FILE = DATA_DIR / "password.json"
 ITERATIONS = 300_000
@@ -144,12 +147,13 @@ def _saved_mode() -> str:
 
 
 def describe() -> str:
+    code = ("UNLOCKED for this session (/lock to undo): the model can edit this tool's own "
+            "code." if self_edit else "The tool's own code is off limits (/unlock to edit it).")
     if restricted():
         return ("RESTRICTED: commands run freely, but dangerous ones (downloads, admin "
                 "rights, auto-start, security or registry changes, hidden or inline code, "
-                "touching passwords or keys) need your password. The tool's own code is "
-                "off limits, secrets are removed from commands' environment, and deletes "
-                "go to the trash.")
+                "touching passwords or keys) need your password. " + code + " Secrets are "
+                "removed from commands' environment, and deletes go to the trash.")
     return "UNLEASHED: no restrictions. Use only in a VM you can throw away."
 
 
@@ -212,9 +216,12 @@ def risks(command: str, workspace: Path) -> list[str]:
     overlap = _inside(workspace, ROOT) or _inside(ROOT, workspace)
     # with no overlap, any mention of the tool's folder is suspicious; with overlap, only
     # its code and data (the rest is ordinary workspace)
-    own = PROTECTED + [DATA_DIR] if overlap else [ROOT]
+    if self_edit:  # /unlock: the code is fair game, but chats and the password aren't
+        own, by_name = [DATA_DIR], False
+    else:
+        own, by_name = (PROTECTED + [DATA_DIR] if overlap else [ROOT]), overlap
     if any(str(p).lower() in low or p.as_posix().lower() in low for p in own) or \
-            (overlap and OWN_NAMES.search(command)):
+            (by_name and OWN_NAMES.search(command)):
         found.append("touches this chat tool's own code or data, which could switch off "
                      "these protections.")
     if CHANGE_VERB.search(command):
@@ -226,9 +233,9 @@ def risks(command: str, workspace: Path) -> list[str]:
     return found
 
 
-def approve(command: str, reasons: list[str]) -> bool:
-    """Show why the command is dangerous and ask for the password."""
-    print("\033[1;33m!! RESTRICTED: this command needs your password\033[0m")
+def approve(command: str, reasons: list[str], what: str = "this command") -> bool:
+    """Show why the action is dangerous and ask for the password."""
+    print(f"\033[1;33m!! RESTRICTED: {what} needs your password\033[0m")
     for i, why in enumerate(reasons):
         print(f"  {'Why:' if i == 0 else '    '} {why}")
     return _password_ok()

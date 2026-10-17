@@ -2,6 +2,7 @@
 shell command yourself)."""
 import os
 import pathlib
+import shutil
 import subprocess
 
 from . import config, guard, memory, models, tools, trash
@@ -13,8 +14,9 @@ from .stream import describe_thinking
 from .tools import SHELL
 
 
-COMMANDS = ("/new", "/chats", "/resume", "/rename", "/models", "/model", "/think", "/notes",
-            "/trash", "/restore", "/mode", "/approve", "/cd", "/help")
+COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/models", "/model", "/think",
+            "/notes", "/trash", "/restore", "/mode", "/approve", "/cd", "/unlock", "/lock",
+            "/help")
 
 
 def handle_command(q: str, project) -> None:
@@ -39,6 +41,8 @@ def handle_command(q: str, project) -> None:
         memory.active.meta["title"] = arg
         memory.active.save()
         print(f"Renamed to: {arg}")
+    elif cmd == "/delete":
+        delete_chats(project, arg)
     elif cmd == "/models":
         models.refresh()
         models.print_installed()
@@ -101,8 +105,65 @@ def handle_command(q: str, project) -> None:
             print("\033[2m[dangerous commands always need your password]\033[0m")
     elif cmd == "/cd":
         return change_workspace(q.partition(" ")[2].strip().strip("\"'"))
+    elif cmd == "/unlock":
+        unlock()
+    elif cmd == "/lock":
+        guard.self_edit = False
+        print("Locked: the model can't see or edit this tool's own code.")
     else:
         print(HELP)
+
+
+def delete_chats(project, arg: str) -> None:
+    """/delete <n|name>: remove one chat for good. /delete all: remove every chat in this
+    project. Unlike /trash, this doesn't go through the trash (chats live outside the
+    workspace, so restore_deleted can't reach them) - it asks first and that's final."""
+    chats = memory.list_chats(project)
+    if not arg:
+        print_chats(chats)
+        arg = ask("Chat number, name, or 'all' to delete: ")
+    if not arg:
+        return
+    if arg.lower() == "all":
+        if not chats:
+            print("No chats to delete.")
+        elif ask(f"Permanently delete all {len(chats)} chat(s) in this project? [y/N]: ").lower() in ("y", "yes"):
+            for c in chats:
+                shutil.rmtree(c.dir, ignore_errors=True)
+            memory.active = None
+            switch_to(memory.Chat.create(project))
+            print(f"Deleted {len(chats)} chat(s).")
+        return
+    if not (chat := find_chat(chats, arg)):
+        return
+    if ask(f"Permanently delete '{chat.title}'? [y/N]: ").lower() not in ("y", "yes"):
+        return
+    was_active = memory.active is not None and memory.active.dir == chat.dir
+    shutil.rmtree(chat.dir, ignore_errors=True)
+    print(f"Deleted '{chat.title}'.")
+    if was_active:
+        memory.active = None
+        remaining = memory.list_chats(project)
+        switch_to(remaining[0] if remaining else memory.Chat.create(project))
+
+
+def unlock() -> None:
+    """Let the model edit this chat tool's own code for the rest of the session."""
+    if guard.self_edit:
+        print("Already unlocked; /lock to undo.")
+        return
+    if guard.restricted() and not guard.approve("", [
+            "lets the model see and change this chat tool's own code (ollama_workspace/, "
+            "chat.py, the launchers) for the rest of this session. That code includes the "
+            "restricted-mode checks, so a bad or tricked edit could weaken them from the "
+            "next start on. Review its changes (git diff) before restarting ochat.",
+            "Your chats, notes and password stay off limits. /lock or restarting ochat "
+            "turns the protection back on."], what="unlocking the tool's own code"):
+        print("Still locked.")
+        return
+    guard.self_edit = True
+    print("\033[33mUnlocked for this session: the model can edit this tool's own code. "
+          "/lock to undo.\033[0m")
 
 
 def change_workspace(path: str):

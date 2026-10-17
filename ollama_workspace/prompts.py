@@ -49,6 +49,7 @@ HELP = """Commands:
   /chats              list this project's chats
   /resume <n|name>    switch chats by number from /chats or by name
   /rename <name>      rename the current chat
+  /delete <n|name>    permanently delete a chat (/delete all: every chat in this project)
   /models             list installed Ollama models
   /model [n|name]     switch model for this chat (no argument: pick from a list)
   /think [level]      how much the model reasons first: off, low, medium, high
@@ -57,6 +58,8 @@ HELP = """Commands:
   /trash              list deleted files and folders that can be restored
   /restore <n|path>   put a deleted item back where it was (/trash empty: delete for good)
   /mode               show this computer's mode (restricted or unleashed) and what it allows
+  /unlock, /lock      let the model edit this chat tool's own code for this session
+                      (restricted mode asks your password), or stop it again
   /approve [on|off]   ask before file changes (and, in unleashed mode, commands), or don't
   /cd [folder]        switch the workspace (and its project chats) without restarting
   !<command>          run a shell command yourself in the workspace, e.g. !git status

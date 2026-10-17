@@ -96,6 +96,7 @@ python chat.py --workspace path/to/project    use another folder as the workspac
 | `/rename <name>` | Rename the current chat (unnamed chats are titled after their first message; names must be unique) |
 | `/notes` | Show the project notes and where to edit them |
 | `/mode` | Show this computer's mode and what it allows |
+| `/unlock`, `/lock` | Let the model see and edit ochat's own code for this session (restricted mode asks your password), or stop it again. Chats and the password stay off limits |
 | `/approve [on\|off]` | Ask before file changes (in unleashed mode, also commands), or stop asking. Lasts for this session |
 | `/cd [folder]` | Switch the workspace without restarting; opens that folder's latest chat |
 | `!<command>` | Run a shell command yourself in the workspace, e.g. `!git status`. Its output isn't sent to the model |
@@ -193,7 +194,7 @@ Password (Enter to cancel):
 
 Restricted mode also:
 - **refuses to start as Administrator**, so commands never inherit admin rights;
-- **hides the tool's own code** (`ollama_workspace/`, `chat.py`, the launchers) and the workspace's `.git/hooks` from the file tools, even when the workspace is the tool's folder. Work on the tool itself in unleashed mode or by hand;
+- **hides the tool's own code** (`ollama_workspace/`, `chat.py`, the launchers) and the workspace's `.git/hooks` from the file tools, even when the workspace is the tool's folder. To have the model work on ochat itself, type `/unlock` (asks your password; lasts until `/lock` or restart) and review its changes with `git diff` before restarting, since that code includes these checks;
 - **removes secrets** (variables with `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `AWS_*`, `GITHUB_*`, …) from the environment commands run with;
 - tells the model which commands need the password, so it avoids them unless they're needed.
 

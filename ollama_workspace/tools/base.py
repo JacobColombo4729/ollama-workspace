@@ -23,14 +23,16 @@ def _inside(p: pathlib.Path, folder: pathlib.Path) -> bool:
 
 
 def _hidden() -> set[pathlib.Path]:
-    """Paths the model may not see: chat memory (other projects' chats live there too),
-    this chat tool itself when it's copied inside the project being worked on, and in
-    restricted mode the tool's code always, so the model can't switch off its guardrails."""
+    """Paths the model may not see: chat memory and the password (always), this chat tool
+    itself when it's copied inside the project being worked on, and in restricted mode the
+    tool's code always, so the model can't switch off its guardrails. /unlock lifts the
+    code rules for the session."""
     hidden = {DATA_DIR.resolve()}
-    if ROOT != config.WORKSPACE and _inside(ROOT, config.WORKSPACE):
+    if ROOT != config.WORKSPACE and _inside(ROOT, config.WORKSPACE) and not guard.self_edit:
         hidden.add(ROOT)
     if guard.restricted():
-        hidden.update(guard.PROTECTED)
+        if not guard.self_edit:
+            hidden.update(guard.PROTECTED)
         # a hook written here would run on an ordinary 'git commit', skipping the password
         hidden.add(config.WORKSPACE / ".git" / "hooks")
     return hidden
