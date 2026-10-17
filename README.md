@@ -19,10 +19,9 @@ A terminal chat for **any Ollama model you have installed**, with:
    ```
    pip install -r requirements.txt
    ```
-3. Choose this computer's [mode](#modes-restricted-and-unleashed), then open a new terminal. The tool won't start without one:
+3. (Optional) It defaults to **restricted** [mode](#modes-restricted-and-unleashed) - fine for your own computer, no setup needed. Only set `OCHAT_MODE` if you want **unleashed** instead (a VM you can throw away), then open a new terminal:
    ```
-   setx OCHAT_MODE restricted      your own computer
-   setx OCHAT_MODE unleashed       a VM you can throw away
+   setx OCHAT_MODE unleashed
    ```
 4. Run it from the project folder you want to work on:
    ```
@@ -94,6 +93,8 @@ python chat.py --workspace path/to/project    use another folder as the workspac
 | `/chats` | List this project's chats (`*` = current) |
 | `/resume <n or name>` | Switch chats by number from `/chats`, by name (case-insensitive), or by a unique part of the name |
 | `/rename <name>` | Rename the current chat (unnamed chats are titled after their first message; names must be unique) |
+| `/delete <n\|name>` | Permanently delete a chat (`/delete all`: every chat in this project). Doesn't go through the trash - chats live outside the workspace |
+| `/agent [n\|name]` | Switch this chat to an agent profile (its own model, tool access, and persona). `/agent new <name>` creates one - you describe it in your own words, which drives how much it narrates vs. just shows code; `/agent delete <n\|name>` removes one; `/agent none` goes back to this chat's own model and full tools |
 | `/notes` | Show the project notes and where to edit them |
 | `/mode` | Show this computer's mode and what it allows |
 | `/unlock`, `/lock` | Let the model see and edit ochat's own code for this session (restricted mode asks your password), or stop it again. Chats and the password stay off limits |
@@ -166,7 +167,7 @@ The model sees each command's output and exit code. A command is stopped after `
 
 ### Modes: restricted and unleashed
 
-Every computer must choose a mode with the `OCHAT_MODE` environment variable. If it's missing or misspelled, the tool won't start. The mode is shown at startup, and `/mode` shows it at any time. To change it, run `setx OCHAT_MODE …` and open a new terminal; it can't be changed from inside a chat.
+Defaults to **restricted** if the `OCHAT_MODE` environment variable is never set, so a new machine needs no setup to start safely. The tool only refuses to start if `OCHAT_MODE` is set to something that isn't a mode (a typo). The mode is shown at startup, and `/mode` shows it at any time. To use unleashed instead, run `setx OCHAT_MODE unleashed` and open a new terminal; it can't be changed from inside a chat.
 
 **Unleashed** (for a VM): no restrictions. File tools accept any path on the computer, file changes and commands run without asking (`/approve on` to be asked), and the model gets up to `UNLEASHED_TOOL_STEPS` (200) tool steps per message instead of 50.
 
@@ -198,7 +199,7 @@ Restricted mode also:
 - **removes secrets** (variables with `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `AWS_*`, `GITHUB_*`, …) from the environment commands run with;
 - tells the model which commands need the password, so it avoids them unless they're needed.
 
-The password is set on the first restricted run. Only a salted hash is stored, in `data/password.json`. If you forget it, delete that file and you'll be asked for a new one.
+The password is set the first time a dangerous action actually needs it - not at startup, so a session that never hits one needs no setup. Only a salted hash is stored, in `data/password.json`. If you forget it, delete that file and you'll be asked for a new one.
 
 **What restricted mode can't stop:** the checks read the command text, so they're a strong speed bump, not a wall. The main gap: the model can write a script with the file tools and run it as an ordinary command (`python script.py`), and the script can do anything a dangerous command could. With `AUTO_APPROVE` off you see every script before it's saved, so keep it off when working on code you don't trust, such as a freshly cloned repo, or use the VM. Approved commands run with your own user's permissions.
 
