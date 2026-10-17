@@ -6,7 +6,7 @@ docstring, so the docstrings are what the model reads.
     edit.py      edit_file, write_file, make_dir, move_path
     deleting.py  delete_path, list_deleted, restore_deleted (via the trash)
     shell.py     run_command
-    history.py   search_history, save_note
+    history.py   search_history, save_note, post_to_board
     dispatch.py  dispatch_to_agent, list_agents - delegating a task to another agent
 """
 from .base import changed, state
@@ -14,7 +14,7 @@ from .browse import file_outline, find_files, list_dir, list_files, read_file, s
 from .deleting import delete_path, list_deleted, restore_deleted
 from .dispatch import dispatch_to_agent, list_agents
 from .edit import edit_file, make_dir, move_path, write_file
-from .history import save_note, search_history
+from .history import post_to_board, save_note, search_history
 from .shell import SHELL, run_command, shell_args
 
 __all__ = ["TOOLS", "SHELL", "active", "changed", "run_tool", "shell_args", "state"]
@@ -22,7 +22,7 @@ __all__ = ["TOOLS", "SHELL", "active", "changed", "run_tool", "shell_args", "sta
 
 TOOLS = [list_dir, list_files, find_files, search_files, file_outline, read_file, edit_file,
          write_file, make_dir, move_path, delete_path, list_deleted, restore_deleted,
-         run_command, search_history, save_note, dispatch_to_agent, list_agents]
+         run_command, search_history, save_note, post_to_board, dispatch_to_agent, list_agents]
 
 
 def active() -> list:

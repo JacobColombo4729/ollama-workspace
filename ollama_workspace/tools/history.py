@@ -1,6 +1,8 @@
-"""Memory tools: search the full transcript of past conversations, and save lasting
-project notes."""
-from .. import memory
+"""Memory tools: search the full transcript of past conversations, save lasting project
+notes, and post to the shared agent board."""
+from datetime import datetime
+
+from .. import agents, memory
 
 
 def search_history(query: str, all_chats: bool = False) -> str:
@@ -53,3 +55,23 @@ def save_note(note: str) -> str:
         f.write(f"- {note}\n")
     print(f"\033[2m[noted] {note}\033[0m")
     return "Saved to project notes."
+
+
+def post_to_board(message: str) -> str:
+    """Post a short status update to this project's shared board, which every chat and
+    agent here sees automatically next turn - progress, findings, or anything another
+    agent working on this project should know about. Unlike save_note (lasting facts,
+    used sparingly), the board is for frequent updates and only keeps the most recent ones.
+
+    Args:
+        message: One short line.
+
+    Returns:
+        Confirmation.
+    """
+    message = " ".join(str(message).split())
+    who = agents.active.name if agents.active else memory.active.title
+    with (memory.active.project / "board.txt").open("a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now():%Y-%m-%d %H:%M}] {who}: {message}\n")
+    print(f"\033[2m[board] {who}: {message}\033[0m")
+    return "Posted to the board."

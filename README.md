@@ -96,6 +96,7 @@ python chat.py --workspace path/to/project    use another folder as the workspac
 | `/delete <n\|name>` | Permanently delete a chat (`/delete all`: every chat in this project). Doesn't go through the trash - chats live outside the workspace |
 | `/agent [n\|name]` | Switch this chat to an agent profile (its own model, tool access, and persona). `/agent new <name>` creates one - you describe it in your own words, which drives how much it narrates vs. just shows code; `/agent delete <n\|name>` removes one; `/agent none` goes back to this chat's own model and full tools |
 | `/notes` | Show the project notes and where to edit them |
+| `/board` | Show the shared [agent board](#agents) and where to edit it |
 | `/mode` | Show this computer's mode and what it allows |
 | `/unlock`, `/lock` | Let the model see and edit ochat's own code for this session (restricted mode asks your password), or stop it again. Chats and the password stay off limits |
 | `/approve [on\|off]` | Ask before file changes (in unleashed mode, also commands), or stop asking. Lasts for this session |
@@ -176,6 +177,8 @@ Giving an agent the `dispatch_to_agent` tool lets it hand a task to another agen
 - **Each agent gets its own persistent chat** in the project (`agent:<name>` in `/chats`), separate from whoever dispatched to it, so its work and context build up across dispatches instead of starting over each time.
 - **No loops.** An agent can't dispatch to itself, directly or through a longer chain (A → B → A is caught, not just A → A), and a chain can only go `MAX_DISPATCH_DEPTH` (3) agents deep before it's refused.
 - Mode, approvals and the password gate apply exactly the same inside a dispatched agent's turn as anywhere else - delegating a task is never a way around them.
+
+Giving an agent the `post_to_board` tool lets it leave a short, timestamped, attributed status update on the project's shared board (`/board`), which every agent and chat in the project sees automatically on its next turn - no dispatch needed. It's for frequent activity ("wrote add.py and verified it runs"), not lasting facts (that's still `save_note`/`notes.md`), and only the most recent posts that fit the context budget are shown; older ones stay on disk but drop out of what the model sees.
 
 ### Modes: restricted and unleashed
 
@@ -263,6 +266,8 @@ data/password.json                    restricted mode's password (salted hash on
 data/projects/<folder>-<hash>/
   project.json                        which folder this project belongs to
   notes.md                            project notes: every chat in the project sees them
+  board.txt                           shared agent board: recent posts, every chat sees them
+  agents/<name>.json                  agent profiles (model, tools, persona) - see Agents
   trash/<id>/                         deleted files and folders, restorable for TRASH_DAYS
   chats/<id>/log.txt                  full transcript: append-only, never shortened
   chats/<id>/chat.json                name, model, dates, and compressed summaries
@@ -270,7 +275,9 @@ data/projects/<folder>-<hash>/
 
 A project is identified by its full folder path, so two folders that share a name stay separate.
 
-**Each turn the model sees** the project notes, the dated summaries of older conversation, and the recent raw log of the current chat. All of it is trimmed to `MEMORY_SHARE` (50%) of the model's context window.
+**Each turn the model sees** the project notes, the shared agent board, the dated summaries of older conversation, and the recent raw log of the current chat. All of it is trimmed to `MEMORY_SHARE` (50%) of the model's context window.
+
+`notes.md` (`save_note`) is for sparse, lasting facts - decisions, conventions, preferences - and keeps everything ever saved. `board.txt` (`post_to_board`, `/board`) is for frequent status updates between agents and only keeps as many recent posts as fit the context budget; older ones drop off the front (they still live in the file on disk, just not in what the model sees) rather than getting summarized like the main log.
 
 **How compression avoids losing memory:**
 
@@ -328,7 +335,7 @@ ollama_workspace/
     edit.py              edit_file, write_file, make_dir, move_path
     deleting.py          delete_path, list_deleted, restore_deleted
     shell.py             run_command
-    history.py           search_history, save_note
+    history.py           search_history, save_note, post_to_board
     dispatch.py          dispatch_to_agent, list_agents
   guard.py               restricted / unleashed modes, dangerous-command checks, password
   trash.py               deleted files: move to trash, list, restore

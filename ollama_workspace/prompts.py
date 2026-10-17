@@ -57,6 +57,7 @@ HELP = """Commands:
   /think [level]      how much the model reasons first: off, low, medium, high
                       (less = faster; no argument: show the current level)
   /notes              show the project notes (shared by all chats here)
+  /board              show the shared agent board (recent posts, seen by every agent here)
   /trash              list deleted files and folders that can be restored
   /restore <n|path>   put a deleted item back where it was (/trash empty: delete for good)
   /mode               show this computer's mode (restricted or unleashed) and what it allows

@@ -2,15 +2,18 @@
 
 data/projects/<folder>-<hash>/       one per workspace folder
     project.json                     which folder this project is
-    notes.md                         notes shared by every chat in the project
+    notes.md                         lasting facts shared by every chat in the project
+    board.txt                        recent timestamped posts shared by every chat/agent
+                                      (post_to_board); same [timestamp] who: text lines as
+                                      log.txt, kept only as far back as the budget allows
     chats/<id>/log.txt               full transcript, append-only, never shortened
     chats/<id>/chat.json             title, timestamps, and summaries of older log
 
-The model sees: project notes + summaries of older log + the recent raw log. When the
-recent part grows past MAX_RECENT, its oldest piece is summarized into a NEW dated
-summary (older summaries aren't rewritten, so they don't lose detail over time). When
-summaries exceed SUMMARY_BUDGET, only the two oldest are merged. Nothing is deleted
-from log.txt, and the model can search all of it with the search_history tool.
+The model sees: project notes + the shared board + summaries of older log + the recent
+raw log. When the recent part grows past MAX_RECENT, its oldest piece is summarized into
+a NEW dated summary (older summaries aren't rewritten, so they don't lose detail over
+time). When summaries exceed SUMMARY_BUDGET, only the two oldest are merged. Nothing is
+deleted from log.txt, and the model can search all of it with the search_history tool.
 """
 import hashlib
 import json
@@ -41,6 +44,7 @@ def project_dir(workspace: Path) -> Path:
     if not (d / "project.json").exists():
         (d / "project.json").write_text(json.dumps({"path": str(workspace)}, indent=2), "utf-8")
     (d / "notes.md").touch()
+    (d / "board.txt").touch()
     return d
 
 
@@ -127,12 +131,18 @@ class Chat:
         self.save()
 
     def memory_prompt(self, budget: int, searchable: bool) -> str:
-        """Notes + summaries + recent log, cut to about `budget` chars so small-context
-        models still fit. What's cut stays on disk (and in search_history)."""
+        """Notes + the shared board + summaries + recent log, cut to about `budget` chars
+        so small-context models still fit. What's cut stays on disk (and in
+        search_history for notes/log; the board only ever keeps its most recent posts)."""
         notes = (self.project / "notes.md").read_text("utf-8").strip()
         if len(notes) > budget // 4:
             notes = notes[:budget // 4] + "\n...[notes cut off to fit the model's context]"
-        left = budget - len(notes)
+        board = (self.project / "board.txt").read_text("utf-8").strip()
+        board_budget = budget // 6
+        if len(board) > board_budget:  # a recent-activity feed: keep the end, not the
+            start = board.find("\n[", len(board) - board_budget)  # start; begin at a full line
+            board = "...[earlier posts left out]" + board[start if start != -1 else -board_budget:]
+        left = budget - len(notes) - len(board)
         shown, used = [], 0
         for s in reversed(self.meta["summaries"]):  # newest summaries first
             block = f"[{s['from']} to {s['to']}]\n{s['text']}"
@@ -153,6 +163,7 @@ class Chat:
             "You are a helpful assistant with long-term memory of past conversations "
             f"with this user. Use it naturally; don't recite it unless asked.{recall}\n\n"
             f"=== PROJECT NOTES (shared by all chats in this project) ===\n{notes or '(none)'}\n\n"
+            f"=== SHARED BOARD (recent updates from every agent in this project) ===\n{board or '(none yet)'}\n\n"
             f"=== SUMMARIES OF OLDER CONVERSATION ===\n{summaries or '(none yet)'}\n\n"
             f"=== RECENT CONVERSATION LOG ===\n{recent or '(none yet)'}"
         )

@@ -15,8 +15,8 @@ from .tools import SHELL
 
 
 COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/agent", "/models", "/model",
-            "/think", "/notes", "/trash", "/restore", "/mode", "/approve", "/cd", "/unlock",
-            "/lock", "/help")
+            "/think", "/notes", "/board", "/trash", "/restore", "/mode", "/approve", "/cd",
+            "/unlock", "/lock", "/help")
 
 
 def handle_command(q: str, project) -> None:
@@ -65,6 +65,11 @@ def handle_command(q: str, project) -> None:
         path = project / "notes.md"
         print(path.read_text("utf-8").strip() or "(no notes yet)")
         print(f"\033[2m[edit by hand: {path}]\033[0m")
+    elif cmd == "/board":
+        path = project / "board.txt"
+        print(path.read_text("utf-8").strip() or "(nothing posted yet)")
+        print(f"\033[2m[every agent in this project sees recent posts automatically; "
+              f"edit by hand: {path}]\033[0m")
     elif cmd == "/mode":
         print(guard.describe())
         print("\033[2m[restricted is the default; set per computer with setx OCHAT_MODE "
