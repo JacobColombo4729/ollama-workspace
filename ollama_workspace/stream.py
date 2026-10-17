@@ -7,7 +7,7 @@ import threading
 import ollama
 
 from . import config, guard, memory, models
-from .config import CHARS_PER_TOKEN, MEMORY_SHARE, STYLE, THINK_BUDGET, THINK_LEVEL
+from .config import CHARS_PER_TOKEN, MEMORY_SHARE, REPEAT_PENALTY, STYLE, THINK_BUDGET, THINK_LEVEL
 from .prompts import CODING, NO_TOOLS, RESTRICTED, UNLEASHED
 from .tools import SHELL, TOOLS
 
@@ -81,7 +81,8 @@ def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str |
     stream = ollama.chat(model=m.name, messages=messages, stream=True,
                          tools=TOOLS if m.tools else None, think=m.think_value(think_level()),
                          options={"num_ctx": m.num_ctx,
-                                  "num_predict": num_predict + think_budget()})
+                                  "num_predict": num_predict + think_budget(),
+                                  "repeat_penalty": REPEAT_PENALTY})
     parts = responsive(stream)
     try:
         for part in parts:
@@ -164,3 +165,20 @@ def interjection(reasoning: str, note: str) -> str:
             + f"The user adds: {note}\n\n"
             "Continue from where you were, taking this into account. Don't restart your "
             "reasoning from scratch or apologize for the interruption.")
+
+
+def continuation(reasoning: str, content: str) -> str:
+    """The message that hands back a reply cut off by the length cap (num_predict), so the
+    model picks up where it left off instead of losing that reasoning/draft and starting over."""
+    so_far = reasoning.strip()
+    if len(so_far) > INTERJECT_REASONING:
+        so_far = "..." + so_far[-INTERJECT_REASONING:]
+    pieces = []
+    if so_far:
+        pieces.append(f"Your reasoning so far:\n{so_far}")
+    if content.strip():
+        pieces.append(f"What you'd written so far:\n{content.strip()}")
+    return ("[You ran out of room and were cut off - you are not finished.]\n\n"
+            + "\n\n".join(pieces) + ("\n\n" if pieces else "")
+            + "Continue exactly from where you left off. Don't restart your reasoning, "
+            "repeat what you already covered, or apologize for the cutoff.")

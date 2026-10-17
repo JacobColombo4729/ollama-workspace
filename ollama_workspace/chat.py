@@ -14,7 +14,7 @@ from .config import MAX_TOOL_STEPS, REPLY_LIMIT, UNLEASHED_TOOL_STEPS
 from .console import ask, ask_message
 from .attachments import attach_files
 from .session import clean_name, drop_if_empty, find_chat, named, print_chats, set_model, switch_to
-from .stream import build_messages, fit_context, interjection, stream_step
+from .stream import build_messages, continuation, fit_context, interjection, stream_step
 from .tools import changed, run_tool
 
 
@@ -141,6 +141,16 @@ def main() -> None:
                         messages.append({"role": "assistant", "content": content})
                     messages.append({"role": "user", "content": interjection(reasoning, note)})
                     print("[continuing with your note...]", flush=True)
+                    continue
+                if done_reason == "length" and not calls:
+                    # cut off by the token cap, not finished: hand the partial reasoning/draft
+                    # back instead of losing it, so the model continues instead of restarting
+                    if content.strip():
+                        replies.append(content.strip() + " [cut off - continuing]")
+                        print()
+                    messages.append({"role": "assistant", "content": content})
+                    messages.append({"role": "user", "content": continuation(reasoning, content)})
+                    print("\033[2m[ran out of room; continuing automatically...]\033[0m", flush=True)
                     continue
                 if content.strip():
                     replies.append(content.strip())

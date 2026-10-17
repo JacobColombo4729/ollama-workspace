@@ -7,8 +7,10 @@ NUM_CTX = 32768            # max context window in tokens; models with less use 
                            # Bigger costs more memory (a 27B model: 32k ~19 GB, 64k ~22 GB)
 CHARS_PER_TOKEN = 3.5      # rough average for code/English, used for context budgeting
 THINK_LEVEL = "low"        # default thinking for new chats: off / low / medium / high (/think)
-THINK_BUDGET = 4096        # extra tokens for thinking at "medium"; low gets half, high double
-REPLY_LIMIT = 4096         # safety cap on reply tokens; the model sizes replies itself (see STYLE)
+THINK_BUDGET = 8192        # extra tokens for thinking at "medium"; low gets half, high double
+REPLY_LIMIT = 8192         # safety cap on reply tokens; the model sizes replies itself (see STYLE)
+REPEAT_PENALTY = 1.15      # >1 discourages the model from repeating itself, esp. while thinking
+                           # (Ollama's own default is 1.1; raise further if it still loops)
 
 # Memory (raw log -> dated summaries; the full log is always kept on disk)
 MAX_RECENT = 30_000        # chars of raw log the model sees before compressing (~8.5k tokens)
