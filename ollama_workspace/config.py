@@ -26,7 +26,7 @@ UNLEASHED_TOOL_STEPS = 200 # the same in unleashed mode, for long autonomous tas
 AUTO_APPROVE = False       # restricted mode: True = edit, create, move and delete files without
                            # asking. Unleashed mode never asks. Either way, /approve switches it.
                            # Commands: restricted asks a password for dangerous ones only
-                           # (see guard.py; the mode comes from OCHAT_MODE)
+                           # (see guard.py; the mode comes from OCHAT_MODE, default restricted)
 COMMAND_TIMEOUT = 300      # default seconds before a shell command is stopped
 MAX_COMMAND_TIMEOUT = 3600 # the most the model may ask for (run_command's timeout)
 WEB_TIMEOUT = 20           # seconds for web_search / fetch_url / http_request (unleashed)

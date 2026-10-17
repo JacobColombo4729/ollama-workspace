@@ -1,10 +1,13 @@
-"""Run modes. Every machine must pick one with the OCHAT_MODE environment variable:
+"""Run modes, set with the OCHAT_MODE environment variable. Defaults to restricted if it's
+never been set, so a new machine doesn't need any setup to start safely:
 
-    restricted   for your own computer. Commands run freely, except dangerous ones
-                 (downloads, admin rights, auto-start, security changes, hidden code, ...),
-                 which show why they're risky and need your password. The tool's own code
-                 and data are off limits to the model, and it won't start as Administrator.
-    unleashed    for a throwaway VM. No restrictions.
+    restricted   the default; for your own computer. Commands run freely, except dangerous
+                 ones (downloads, admin rights, auto-start, security changes, hidden code,
+                 ...), which show why they're risky and need your password. The tool's own
+                 code and data are off limits to the model, and it won't start as
+                 Administrator.
+    unleashed    for a throwaway VM. No restrictions. Must be set explicitly - it's never
+                 the default.
 """
 import getpass
 import hashlib
@@ -116,25 +119,24 @@ def _inside(p: Path, folder: Path) -> bool:
 
 
 def init() -> None:
-    """Read the mode; quit with instructions if it's missing, and enforce restricted's
-    startup rules."""
+    """Read the mode, defaulting to restricted if it's never been set (so a fresh machine
+    starts safely with no setup); quit only if it's set to something that isn't a mode.
+    Then enforce restricted's startup rules. No password is required just to start - it's
+    only ever asked for (and set, the first time) when a dangerous action actually needs
+    approving, so an ordinary session that never hits one needs no setup at all."""
     global mode
     raw = os.environ.get("OCHAT_MODE") or _saved_mode()
-    mode = raw.strip().lower()
+    mode = (raw or "restricted").strip().lower()
     if mode not in MODES:
-        got = f"OCHAT_MODE is '{raw}'" if raw else "OCHAT_MODE isn't set"
-        sys.exit(f"{got}. Choose a mode for this computer:\n"
+        sys.exit(f"OCHAT_MODE is '{raw}', which isn't a mode. Use:\n"
                  "  setx OCHAT_MODE restricted     your own computer: dangerous commands "
-                 "need a password\n"
+                 "need a password (this is the default if OCHAT_MODE is unset)\n"
                  "  setx OCHAT_MODE unleashed      a throwaway VM: no restrictions\n"
-                 "then run ochat again. (macOS/Linux: add 'export OCHAT_MODE=restricted' "
-                 "to your shell profile and open a new terminal.)")
-    if restricted():
-        if _is_admin():
-            sys.exit("Restricted mode won't run as Administrator: commands would inherit "
-                     "admin rights. Start ochat from a normal (non-elevated) terminal.")
-        if not PASSWORD_FILE.exists():
-            _set_password()
+                 "then run ochat again. (macOS/Linux: add 'export OCHAT_MODE=...' to your "
+                 "shell profile and open a new terminal.)")
+    if restricted() and _is_admin():
+        sys.exit("Restricted mode won't run as Administrator: commands would inherit "
+                 "admin rights. Start ochat from a normal (non-elevated) terminal.")
 
 
 def _saved_mode() -> str:
@@ -176,9 +178,9 @@ def _hash(password: str, salt: bytes) -> str:
 
 
 def _set_password() -> None:
-    print("Restricted mode: set a password for approving dangerous commands.\n"
-          "(Only a salted hash is stored, in data/password.json. Forgot it? Delete that "
-          "file and you'll be asked for a new one.)")
+    print("No password set yet. This approves this and future dangerous actions, so set "
+          "one now.\n(Only a salted hash is stored, in data/password.json. Forgot it? "
+          "Delete that file and you'll be asked for a new one.)")
     while True:
         first = getpass.getpass("New password: ")
         if len(first) < 4:
@@ -195,11 +197,17 @@ def _set_password() -> None:
 
 
 def _password_ok(attempts: int = 3) -> bool:
+    if not PASSWORD_FILE.exists():
+        # first dangerous action this install has ever hit: set the password right here,
+        # instead of demanding one at startup whether or not it turns out to be needed
+        _set_password()
+        return True  # just set and confirmed it (typed twice); no need to type it a third time
     try:
         stored = json.loads(PASSWORD_FILE.read_text("utf-8"))
     except (OSError, ValueError):
-        print("[the password file is missing or damaged; restart ochat to set a new one]")
-        return False
+        print("[the password file is damaged; setting a new one]")
+        _set_password()
+        return True
     salt = bytes.fromhex(stored["salt"])
     for left in range(attempts, 0, -1):
         typed = getpass.getpass("Password (Enter to cancel): ")
