@@ -1,6 +1,8 @@
 """The run_command tool. In restricted mode dangerous commands need the user's password
-(see guard.py); in unleashed mode commands ask first only when approvals are on."""
+(see guard.py); in unleashed mode commands ask first only when approvals are on. Either
+way, must_refuse()'s checks apply first and can't be approved around."""
 import os
+import signal
 import subprocess
 
 from .. import config, guard, models
@@ -15,6 +17,35 @@ SHELL = "PowerShell" if os.name == "nt" else os.environ.get("SHELL", "/bin/sh")
 def shell_args(command: str) -> list[str]:
     return (["powershell", "-NoProfile", "-NonInteractive", "-Command", command]
             if os.name == "nt" else [SHELL, "-c", command])
+
+
+def _start(args: list[str], cwd, env: dict) -> subprocess.Popen:
+    """Start the command in its own process group, so _kill_tree can take down anything
+    it started too, not just the one process."""
+    kwargs = dict(cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                 encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, env=env)
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["start_new_session"] = True
+    return subprocess.Popen(args, **kwargs)
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Kill the command and anything it started (a scan, a listener, …), not just the one
+    process - Ctrl+C should mean it actually stops, not that it keeps running unattended."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=10)
+        else:
+            os.killpg(proc.pid, signal.SIGKILL)
+    except Exception:
+        pass
+    try:
+        proc.kill()
+    except Exception:
+        pass
 
 
 def run_command(command: str, cwd: str = ".", timeout: int = 0) -> str:
@@ -36,6 +67,8 @@ def run_command(command: str, cwd: str = ".", timeout: int = 0) -> str:
     folder = _resolve(cwd)
     if not folder.is_dir():
         return f"Error: {cwd} is not a folder."
+    if refused := guard.must_refuse(command):
+        return f"Not run: this command {refused}"
     print(f"\033[33m$ {command}\033[0m" + (f"\033[2m  (in {_rel(folder)})\033[0m"
                                            if folder != config.WORKSPACE else ""))
     if guard.restricted():
@@ -46,20 +79,22 @@ def run_command(command: str, cwd: str = ".", timeout: int = 0) -> str:
                     "ask the user if it's needed.")
     elif rejected := _confirm("Run this command?"):
         return rejected
-    try:
-        result = subprocess.run(shell_args(command), cwd=folder, capture_output=True,
-                                text=True, encoding="utf-8", errors="replace",
-                                stdin=subprocess.DEVNULL, timeout=limit_s,
-                                env=guard.command_env())
-    except subprocess.TimeoutExpired as e:
-        out = (e.stdout or "") + (e.stderr or "")
-        out = out.decode("utf-8", "replace") if isinstance(out, bytes) else out
-        return (f"Timed out after {limit_s}s and was stopped. Pass a larger timeout if it "
-                "needs longer.\n" + _tail(out, 4000))
-    out = (result.stdout or "") + (f"\n[stderr]\n{result.stderr}" if result.stderr.strip() else "")
-    limit = models.current.chars(READ_SHARE) // 2
-    shown = _tail(out.strip(), limit) or "(no output)"
-    if out.strip():
-        print(f"\033[2m{_tail(out.strip(), 2000)}\033[0m")
-    changed.add(f"$ {command}")
-    return f"Exit code {result.returncode}\n{shown}"
+    with _start(shell_args(command), folder, guard.command_env()) as proc:
+        try:
+            stdout, stderr = proc.communicate(timeout=limit_s)
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            stdout, stderr = proc.communicate()
+            return (f"Timed out after {limit_s}s and was stopped, including anything it "
+                    "started. Pass a larger timeout if it needs longer.\n"
+                    + _tail((stdout or "") + (stderr or ""), 4000))
+        except BaseException:  # Ctrl+C (KeyboardInterrupt) or anything else: never leave
+            _kill_tree(proc)     # it, or anything it started, running unattended
+            raise
+        out = (stdout or "") + (f"\n[stderr]\n{stderr}" if (stderr or "").strip() else "")
+        limit = models.current.chars(READ_SHARE) // 2
+        shown = _tail(out.strip(), limit) or "(no output)"
+        if out.strip():
+            print(f"\033[2m{_tail(out.strip(), 2000)}\033[0m")
+        changed.add(f"$ {command}")
+        return f"Exit code {proc.returncode}\n{shown}"

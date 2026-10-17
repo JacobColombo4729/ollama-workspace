@@ -237,20 +237,21 @@ def _password_ok(attempts: int = 3) -> bool:
 
 
 def risks(command: str, workspace: Path) -> list[str]:
-    """Why this command is dangerous; empty if it's an ordinary command."""
+    """Why this command is dangerous; empty if it's an ordinary command. Data (chats,
+    password, scope, agent profiles) is handled by must_refuse() instead - that one can't
+    be approved around at all, in either mode; this is the password-askable set."""
     found = [why for rx, why in DANGEROUS if rx.search(command)]
     low = command.lower()
     overlap = _inside(workspace, ROOT) or _inside(ROOT, workspace)
     # with no overlap, any mention of the tool's folder is suspicious; with overlap, only
-    # its code and data (the rest is ordinary workspace)
-    if self_edit:  # /unlock: the code is fair game, but chats and the password aren't
-        own, by_name = [DATA_DIR], False
-    else:
-        own, by_name = (PROTECTED + [DATA_DIR] if overlap else [ROOT]), overlap
-    if any(str(p).lower() in low or p.as_posix().lower() in low for p in own) or \
-            (by_name and OWN_NAMES.search(command)):
-        found.append("touches this chat tool's own code or data, which could switch off "
-                     "these protections.")
+    # its code (the rest is ordinary workspace). self_edit (/unlock) means the code is
+    # fair game too - only must_refuse()'s data check still applies.
+    if not self_edit:
+        own, by_name = (PROTECTED if overlap else [ROOT]), overlap
+        if any(str(p).lower() in low or p.as_posix().lower() in low for p in own) or \
+                (by_name and OWN_NAMES.search(command)):
+            found.append("touches this chat tool's own code, which could switch off "
+                         "these protections.")
     if CHANGE_VERB.search(command):
         outside = [m for m in ABS_PATH.findall(command)
                    if not _inside(Path(m).expanduser().resolve(), workspace)]
@@ -258,12 +259,43 @@ def risks(command: str, workspace: Path) -> list[str]:
             where = ", ".join(outside[:3]) or "your user folder"
             found.append(f"changes, moves or deletes files outside the workspace ({where}).")
     # only checked at all once a project has defined a scope (see scope.py) - an ordinary,
-    # non-pentest project never hits this
+    # non-pentest project never hits this. In restricted mode this is password-askable;
+    # in unleashed mode must_refuse() refuses it outright instead (see there for why).
     project = memory.project_dir(config.WORKSPACE)
     if out := scope.out_of_scope(command, project):
         found.append(f"touches a target outside this project's defined scope: "
                      f"{', '.join(out[:3])}. /scope add it first if it's authorized.")
     return found
+
+
+def must_refuse(command: str) -> str | None:
+    """Checks that apply no matter the mode and can never be approved around - unlike
+    risks()/approve()'s password-askable set:
+
+    - Touching this tool's own saved data (chats, password, scope, agent profiles, the
+      board) from a command. The file tools already can't reach data/ at all, in any
+      mode; this closes the same gap for run_command, which has no path restriction of
+      its own. There's never a legitimate reason for a command to need this - edit those
+      files by hand if you do.
+    - In unleashed mode specifically: a command naming a target outside this project's
+      defined scope (see scope.py). Restricted mode asks the password instead (see
+      risks()); unleashed refuses outright, since unleashed is built for unattended runs
+      where there's often no one watching to answer a prompt - a prompt nobody answers is
+      the same as the agent just stopping, so this has to be a hard stop, not a question.
+    """
+    low = command.lower()
+    if str(DATA_DIR).lower() in low or DATA_DIR.as_posix().lower() in low:
+        return ("touches this chat tool's own saved data (chats, password, scope, agent "
+                "profiles), which no command may do in any mode. Edit those files by hand "
+                "if you need to.")
+    if not restricted():
+        project = memory.project_dir(config.WORKSPACE)
+        if out := scope.out_of_scope(command, project):
+            return (f"touches a target outside this project's defined scope: "
+                    f"{', '.join(out[:3])}. Unleashed mode refuses this outright rather "
+                    "than asking, since no one may be watching to answer. /scope add it "
+                    "first if it's authorized.")
+    return None
 
 
 def approve(command: str, reasons: list[str], what: str = "this command") -> bool:
