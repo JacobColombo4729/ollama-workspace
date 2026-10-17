@@ -6,10 +6,11 @@ import threading
 
 import ollama
 
-from . import config, guard, memory, models
+from . import agents, config, guard, memory, models
 from .config import CHARS_PER_TOKEN, MEMORY_SHARE, REPEAT_PENALTY, STYLE, THINK_BUDGET, THINK_LEVEL
 from .prompts import CODING, NO_TOOLS, RESTRICTED, UNLEASHED
-from .tools import SHELL, TOOLS
+from .tools import SHELL
+from .tools import active as active_tools
 
 
 TRIMMED = "[old tool output removed to save context; call the tool again if you need it]"
@@ -42,17 +43,23 @@ def describe_thinking() -> str:
 
 
 def build_messages(user_msg: str) -> list:
+    """One combined system message, not several - some models' chat templates reject a
+    system message anywhere but first, and reject more than one outright."""
     m = models.current
-    return [
-        {"role": "system", "content": memory.active.memory_prompt(m.chars(MEMORY_SHARE), m.tools)},
-        {"role": "system", "content": CODING.format(
+    parts = [
+        memory.active.memory_prompt(m.chars(MEMORY_SHARE), m.tools),
+        CODING.format(
             workspace=config.WORKSPACE, os=platform.system(), shell=SHELL,
             paths=("all paths are relative to the workspace" if guard.restricted() else
                    "paths are relative to the workspace, or absolute"),
-            mode_note=RESTRICTED if guard.restricted() else UNLEASHED)
-                                      if m.tools else NO_TOOLS},
-        # style rules go last so they aren't buried under the long log
-        {"role": "system", "content": "Response style: " + STYLE},
+            mode_note=RESTRICTED if guard.restricted() else UNLEASHED) if m.tools else NO_TOOLS,
+    ]
+    if agents.active and agents.active.persona:
+        parts.append("Your role: " + agents.active.persona)
+    # style rules go last so they aren't buried under the long log
+    parts.append("Response style: " + STYLE)
+    return [
+        {"role": "system", "content": "\n\n".join(parts)},
         {"role": "user", "content": user_msg},
     ]
 
@@ -79,7 +86,7 @@ def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str |
     # and cap the reply ourselves (each streamed content chunk is ~1 token)
     m = models.current
     stream = ollama.chat(model=m.name, messages=messages, stream=True,
-                         tools=TOOLS if m.tools else None, think=m.think_value(think_level()),
+                         tools=active_tools() if m.tools else None, think=m.think_value(think_level()),
                          options={"num_ctx": m.num_ctx,
                                   "num_predict": num_predict + think_budget(),
                                   "repeat_penalty": REPEAT_PENALTY})
