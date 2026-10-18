@@ -17,8 +17,11 @@ A terminal chat for **any Ollama model you have installed**, with:
    Any chat model from the [Ollama library](https://ollama.com/library) works. For code editing, choose one that lists **tools** support (Qwen, Llama 3.1+, Mistral and others).
 2. Install the Python package (Python 3.10+):
    ```
-   pip install -r requirements.txt
+   pip install -e .
    ```
+   This also installs an `ochat` command (so `ochat` works the same as `python chat.py`, from
+   any folder on your PATH). `pip install -r requirements.txt` still works too, if you'd rather
+   not install it as a package.
 3. (Optional) It defaults to **restricted** [mode](#modes-restricted-and-unleashed) - fine for your own computer, no setup needed. Only set `OCHAT_MODE` if you want **unleashed** instead (a VM you can throw away), then open a new terminal:
    ```
    setx OCHAT_MODE unleashed
@@ -356,13 +359,49 @@ OLLAMA_FLASH_ATTENTION=1
 OLLAMA_KV_CACHE_TYPE=q8_0
 ```
 
+## Programmatic use
+
+For scripting or embedding ollama-workspace in something else, `ollama_workspace.api` runs a
+single turn without the REPL:
+
+```python
+from ollama_workspace.api import run_once
+
+reply = run_once("path/to/project", "list the files here", model="qwen3:8b")
+print(reply)
+```
+
+It reuses the same memory, tools and mode rules (restricted/unleashed, scope, ...) as an
+interactive session, so the project it's pointed at keeps accumulating the same persistent
+memory either way. Pass `agent="name"` to run as one of that project's agent profiles instead
+(its own model and persona apply). It needs a running Ollama server, same as the REPL; see the
+docstring in `ollama_workspace/api.py` for details, including what's different about calling it
+headless (no approval prompts by default, since there's no one to answer them).
+
+## Development
+
+```
+pip install -e ".[dev]"
+pytest
+ruff check .
+```
+
+The test suite runs without a network connection or an Ollama server - it covers the
+security-critical pure functions (`guard.py`, `scope.py`, path resolution, the trash, memory
+compaction) against temporary projects, never the real `data/` directory.
+
 ## Project layout
 
 ```
 chat.py                  entry point
 ochat.bat / ochat        launchers for Windows / macOS and Linux
+pyproject.toml           packaging (pip install -e .), the ochat console entry point,
+                         pytest/ruff config
+tests/                   pytest suite (no network/Ollama needed; see Development)
+.github/workflows/ci.yml ruff check + pytest on push/PR
 ollama_workspace/
   chat.py                startup: parse args, pick the chat/model, the input loop
+  api.py                 headless API: run one turn programmatically, without the REPL
   turn.py                run one message to completion: tool loop, interrupts, logging
   prompts.py             system prompts and the /help text
   stream.py              requests to the model: context trimming, streaming, Ctrl+C, thinking
