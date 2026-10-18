@@ -11,6 +11,10 @@ THINK_BUDGET = 8192        # extra tokens for thinking at "medium"; low gets hal
 REPLY_LIMIT = 8192         # safety cap on reply tokens; the model sizes replies itself (see STYLE)
 REPEAT_PENALTY = 1.15      # >1 discourages the model from repeating itself, esp. while thinking
                            # (Ollama's own default is 1.1; raise further if it still loops)
+TEMPERATURE = 0.3          # lower = more deterministic, better tool-call format adherence.
+                           # Ollama's own default is ~0.8. Matters most for weaker/quantized
+                           # models doing agentic tool-calling work - raise it back up if replies
+                           # feel too flat for open-ended writing.
 
 # Memory (raw log -> dated summaries; the full log is always kept on disk)
 MAX_RECENT = 30_000        # chars of raw log the model sees before compressing (~8.5k tokens)
