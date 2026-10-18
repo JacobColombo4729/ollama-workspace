@@ -26,3 +26,16 @@ ochat = "ollama_workspace.chat:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ollama_workspace"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Pyflakes + basic pycodestyle error classes only (this ruff version's own default pulls in
+# far more, e.g. bandit/pylint-style rules, which would mean rewriting a lot of working code
+# just to satisfy a lint pass - this is meant to catch real bugs, not restyle the project).
+select = ["E4", "E7", "E9", "F"]
