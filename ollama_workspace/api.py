@@ -25,6 +25,12 @@ Rough edges, documented rather than fixed here to keep this change additive:
   data/settings.json), Session loads a model without persisting that choice, so a headless
   call sharing a workspace with an interactive session won't change what that session
   reopens to.
+- The REPL's /reasoning setting (whether the model's reasoning is printed) lives in
+  data/settings.json and governs interactive sessions only. A headless call never prints to
+  a terminal anyone is reading, so Session/run_once default show_thinking to False
+  regardless of that saved setting, and never touch it; pass show_thinking=True to print
+  reasoning for this call anyway. Either way, the model reasons exactly as /think says to -
+  this only controls what's printed.
 """
 from contextlib import contextmanager
 from pathlib import Path
@@ -38,11 +44,16 @@ __all__ = ["Session", "run_once"]
 
 @contextmanager
 def Session(workspace, model: str | None = None, agent: str | None = None,
-           approve: bool = False):
+           approve: bool = False, show_thinking: bool | None = None):
     """Point every module-level global at `workspace`'s project for the duration of the
     `with` block, restoring the previous values on exit. If `agent` is given, that agent's
     own model is used (and its tools/persona apply) rather than `model`; `model` is a
     fallback if the agent has none set.
+
+    `show_thinking` controls whether the model's reasoning is printed during this call:
+    None (default) means off, regardless of the REPL's saved /reasoning setting; pass True
+    to print it anyway, or False to be explicit. It never changes how much the model
+    reasons - that's /think's job, unaffected by this.
 
     Yields the memory.Chat this call logs to (a fresh one, or the agent's persistent one -
     see agents.agent_chat).
@@ -56,6 +67,7 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
     prev_chat, prev_agent_obj = memory.active, agents.active
     prev_names, prev_model_obj = state.active_names, models.current
     prev_ask_first, prev_changed = state.ask_first, set(changed)
+    prev_show_thinking = models.show_thinking_override
 
     config.WORKSPACE = Path(workspace).expanduser().resolve()
     project = memory.project_dir(config.WORKSPACE)
@@ -75,6 +87,7 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
         agents.activate(target_agent)
         models.current = models.load(use_model)
         state.ask_first = approve
+        models.show_thinking_override = bool(show_thinking)
         yield chat
     finally:
         config.WORKSPACE = prev_workspace
@@ -83,17 +96,19 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
         state.active_names = prev_names
         models.current = prev_model_obj
         state.ask_first = prev_ask_first
+        models.show_thinking_override = prev_show_thinking
         changed.clear()
         changed.update(prev_changed)
 
 
 def run_once(workspace, message: str, model: str | None = None, agent: str | None = None,
-             approve: bool = False) -> str:
+             approve: bool = False, show_thinking: bool | None = None) -> str:
     """Send one message to `model` (or to `agent`'s own model) in `workspace`'s project and
     return the model's final reply - the non-interactive equivalent of typing a message at
     the ochat prompt. Memory, tools, and mode rules (restricted/unleashed, scope, ...)
     behave exactly as they do in the REPL; see the module docstring for what's different
-    about running headless (no approval prompts by default, model choice isn't persisted).
+    about running headless (no approval prompts by default, model choice isn't persisted,
+    reasoning isn't printed unless show_thinking=True).
     """
-    with Session(workspace, model, agent, approve):
+    with Session(workspace, model, agent, approve, show_thinking):
         return run_turn(message)

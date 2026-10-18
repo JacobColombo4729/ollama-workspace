@@ -85,6 +85,7 @@ def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str |
     # num_predict counts thinking + reply together, so give thinking its own budget
     # and cap the reply ourselves (each streamed content chunk is ~1 token)
     m = models.current
+    show = models.show_thinking()  # read once: a setting change mid-stream shouldn't flicker
     stream = ollama.chat(model=m.name, messages=messages, stream=True,
                          tools=active_tools() if m.tools else None, think=m.think_value(think_level()),
                          options={"num_ctx": m.num_ctx,
@@ -98,14 +99,18 @@ def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str |
             think_chunk = part["message"].get("thinking") or ""
             if think_chunk:
                 if not in_think:
-                    print("\033[2m[thinking]\n", end="", flush=True)  # dim
+                    if show:
+                        print("\033[2m[thinking]\n", end="", flush=True)  # dim
                     in_think = True
-                print(think_chunk, end="", flush=True)
-                reasoning += think_chunk
+                if show:
+                    print(think_chunk, end="", flush=True)
+                reasoning += think_chunk  # still collected: used by interjection/continuation,
+                                          # and the model still reasons - only the print is gated
             chunk = part["message"]["content"] or ""
             if chunk:
                 if in_think:
-                    print("\033[0m\n\n", end="", flush=True)  # reset dim, blank line before answer
+                    if show:
+                        print("\033[0m\n\n", end="", flush=True)  # reset dim, blank line before answer
                     in_think = False
                 print(chunk, end="", flush=True)
                 content += chunk
@@ -117,7 +122,7 @@ def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str |
         done_reason = "interrupted"
     finally:
         parts.close()  # tells the reader thread to close the connection, stopping Ollama
-    print("\033[0m" + ("\n" if in_think or done_reason == "interrupted" else ""),
+    print("\033[0m" + ("\n" if (in_think and show) or done_reason == "interrupted" else ""),
           end="", flush=True)
     return content, reasoning, calls, done_reason
 

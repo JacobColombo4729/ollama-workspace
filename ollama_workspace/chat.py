@@ -59,6 +59,8 @@ def main() -> None:
     chats = memory.list_chats(project)
     color = "33" if guard.restricted() else "31"
     print(f"\033[1;{color}mMode: {guard.mode.upper()}\033[0m  (/mode for details)")
+    print(f"\033[2m[reasoning display: {'on' if models.show_thinking() else 'off'} "
+          "- /reasoning to change]\033[0m")
     print(f"Project: {config.WORKSPACE}")
     keep = not args.model
     if args.name:

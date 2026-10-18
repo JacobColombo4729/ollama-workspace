@@ -15,8 +15,8 @@ from .tools import SHELL
 
 
 COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/agent", "/models", "/model",
-            "/think", "/notes", "/board", "/findings", "/scope", "/trash", "/restore", "/mode",
-            "/approve", "/pace", "/cd", "/unlock", "/lock", "/help")
+            "/think", "/reasoning", "/notes", "/board", "/findings", "/scope", "/trash",
+            "/restore", "/mode", "/approve", "/pace", "/cd", "/unlock", "/lock", "/help")
 
 
 def handle_command(q: str, project) -> None:
@@ -61,6 +61,14 @@ def handle_command(q: str, project) -> None:
             memory.active.meta["think"] = arg.lower()  # each chat remembers its level
             memory.active.save()
         print(describe_thinking()[0].upper() + describe_thinking()[1:])
+    elif cmd == "/reasoning":
+        if arg and arg.lower() not in ("on", "off"):
+            print("Choose 'on' or 'off'.")
+            return
+        if arg:
+            models.set_show_thinking(arg.lower() == "on")
+        print(f"Reasoning display: {'on' if models.show_thinking() else 'off'} "
+              "(this only controls what's printed, not how much the model reasons - see /think)")
     elif cmd == "/notes":
         path = project / "notes.md"
         print(path.read_text("utf-8").strip() or "(no notes yet)")
