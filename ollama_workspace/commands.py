@@ -15,7 +15,7 @@ from .tools import SHELL
 
 
 COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/agent", "/models", "/model",
-            "/think", "/reasoning", "/notes", "/board", "/findings", "/scope", "/trash",
+            "/think", "/reasoning", "/notes", "/decisions", "/board", "/findings", "/scope", "/trash",
             "/restore", "/mode", "/approve", "/pace", "/cd", "/unlock", "/lock", "/help")
 
 
@@ -73,6 +73,11 @@ def handle_command(q: str, project) -> None:
         path = project / "notes.md"
         print(path.read_text("utf-8").strip() or "(no notes yet)")
         print(f"\033[2m[edit by hand: {path}]\033[0m")
+    elif cmd == "/decisions":
+        path = project / "decisions.md"
+        print(path.read_text("utf-8").strip() or "(no decisions saved yet)")
+        print(f"\033[2m[every agent in this project sees recent ones automatically; "
+              f"older ones via search_history; edit by hand: {path}]\033[0m")
     elif cmd == "/board":
         path = project / "board.txt"
         print(path.read_text("utf-8").strip() or "(nothing posted yet)")

@@ -6,15 +6,19 @@ from .. import agents, memory
 
 
 def search_history(query: str, all_chats: bool = False) -> str:
-    """Search the full saved transcript of past conversations, including parts that are
-    only summarized in your memory. Use it to recover exact earlier details.
+    """Search the full saved transcript of past conversations AND the full project
+    decisions log (every save_note ever saved, not just the recent slice shown in your
+    context), including parts that are only summarized in your memory. Use it to recover
+    an exact earlier detail or an older decision that's aged out of what's shown to you.
 
     Args:
-        query: Words to look for (case-insensitive); an exchange matches if it has all of them.
-        all_chats: Also search the other chats in this project.
+        query: Words to look for (case-insensitive); an exchange/entry matches if it has
+            all of them.
+        all_chats: Also search the other chats in this project (decisions.md is always
+            searched either way - it's project-wide, not per-chat).
 
     Returns:
-        Up to 15 matching exchanges with their dates, most recent last.
+        Up to 15 matching exchanges/entries with their dates, most recent last.
     """
     words = [w.lower() for w in str(query).split()]
     if not words:
@@ -32,6 +36,14 @@ def search_history(query: str, all_chats: bool = False) -> str:
                     ex = ("..." if s else "") + ex[s:s + 1500] + "..."
                 hits.append((stamp.group(1) if stamp else "",
                              f"--- chat: {chat.title} ---\n{ex.strip()}"))
+    decisions_path = memory.active.project / "decisions.md"
+    if decisions_path.exists():
+        for line in decisions_path.read_text("utf-8").splitlines():
+            low = line.lower()
+            if line.strip() and all(w in low for w in words):
+                stamp = memory.STAMP.search(line)
+                hits.append((stamp.group(1) if stamp else "",
+                             f"--- project decisions log ---\n{line.strip()}"))
     if not hits:
         return "No matches."
     shown = [h for _, h in sorted(hits, key=lambda h: h[0])][-15:]
@@ -40,9 +52,10 @@ def search_history(query: str, all_chats: bool = False) -> str:
 
 
 def save_note(note: str) -> str:
-    """Save a lasting fact about this project (decision, convention, user preference) to the
-    project notes that every chat in this project sees. Use sparingly, for things that matter
-    beyond this conversation.
+    """Save a lasting fact about this project (decision, convention, user preference) to
+    the project's decisions log, which every chat in this project sees (the recent part
+    directly, older entries via search_history). Use sparingly, for things that matter
+    beyond this conversation. Never deleted or rewritten - a permanent, timestamped record.
 
     Args:
         note: One short sentence.
@@ -51,10 +64,10 @@ def save_note(note: str) -> str:
         Confirmation.
     """
     note = " ".join(str(note).split())
-    with (memory.active.project / "notes.md").open("a", encoding="utf-8") as f:
-        f.write(f"- {note}\n")
+    with (memory.active.project / "decisions.md").open("a", encoding="utf-8") as f:
+        f.write(f"[{datetime.now():%Y-%m-%d %H:%M}] {note}\n")
     print(f"\033[2m[noted] {note}\033[0m")
-    return "Saved to project notes."
+    return "Saved to the project decisions log."
 
 
 def post_to_board(message: str) -> str:

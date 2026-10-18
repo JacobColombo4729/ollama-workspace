@@ -2,7 +2,17 @@
 
 data/projects/<folder>-<hash>/       one per workspace folder
     project.json                     which folder this project is
-    notes.md                         lasting facts shared by every chat in the project
+    notes.md                         STRUCTURAL content only (team org chart, language
+                                      conventions) - seeded by install.py, small and
+                                      stable. Not where save_note() writes anymore (see
+                                      decisions.md) - this file should stay small enough
+                                      that it's never truncated.
+    decisions.md                     lasting facts/decisions (save_note), one per line,
+                                      timestamped like board.txt - append-only, never
+                                      deleted or rewritten. The in-context view keeps the
+                                      most RECENT entries (like board.txt/findings.txt,
+                                      not like notes.md used to), and the model can search
+                                      its full history with search_history.
     board.txt                        recent timestamped posts shared by every chat/agent
                                       (post_to_board); same [timestamp] who: text lines as
                                       log.txt, kept only as far back as the budget allows
@@ -14,11 +24,12 @@ data/projects/<folder>-<hash>/       one per workspace folder
     chats/<id>/log.txt               full transcript, append-only, never shortened
     chats/<id>/chat.json             title, timestamps, and summaries of older log
 
-The model sees: project notes + the shared board + summaries of older log + the recent
-raw log. When the recent part grows past MAX_RECENT, its oldest piece is summarized into
-a NEW dated summary (older summaries aren't rewritten, so they don't lose detail over
-time). When summaries exceed SUMMARY_BUDGET, only the two oldest are merged. Nothing is
-deleted from log.txt, and the model can search all of it with the search_history tool.
+The model sees: project notes + the decisions log + the shared board + summaries of older
+log + the recent raw log. When the recent part grows past MAX_RECENT, its oldest piece is
+summarized into a NEW dated summary (older summaries aren't rewritten, so they don't lose
+detail over time). When summaries exceed SUMMARY_BUDGET, only the two oldest are merged.
+Nothing is deleted from log.txt or decisions.txt, and the model can search all of both
+with the search_history tool.
 """
 import hashlib
 import json
@@ -60,6 +71,7 @@ def project_dir(workspace: Path) -> Path:
     if not (d / "project.json").exists():
         (d / "project.json").write_text(json.dumps({"path": str(workspace)}, indent=2), "utf-8")
     (d / "notes.md").touch()
+    (d / "decisions.md").touch()
     (d / "board.txt").touch()
     (d / "scope.txt").touch()
     (d / "findings.txt").touch()
@@ -154,11 +166,12 @@ class Chat:
         in search_history for notes/log; the board/findings only ever keep their most
         recent entries)."""
         notes = (self.project / "notes.md").read_text("utf-8").strip()
-        if len(notes) > budget // 4:
-            notes = notes[:budget // 4] + "\n...[notes cut off to fit the model's context]"
+        if len(notes) > budget // 8:
+            notes = notes[:budget // 8] + "\n...[notes cut off to fit the model's context]"
+        decisions = _tail_feed(self.project / "decisions.md", budget // 6, "decisions")
         board = _tail_feed(self.project / "board.txt", budget // 6, "posts")
         findings = _tail_feed(self.project / "findings.txt", budget // 6, "findings")
-        left = budget - len(notes) - len(board) - len(findings)
+        left = budget - len(notes) - len(decisions) - len(board) - len(findings)
         shown, used = [], 0
         for s in reversed(self.meta["summaries"]):  # newest summaries first
             block = f"[{s['from']} to {s['to']}]\n{s['text']}"
@@ -178,7 +191,8 @@ class Chat:
         return (
             "You are a helpful assistant with long-term memory of past conversations "
             f"with this user. Use it naturally; don't recite it unless asked.{recall}\n\n"
-            f"=== PROJECT NOTES (shared by all chats in this project) ===\n{notes or '(none)'}\n\n"
+            f"=== PROJECT NOTES (team structure/conventions, shared by all chats) ===\n{notes or '(none)'}\n\n"
+            f"=== PROJECT DECISIONS LOG (recent lasting facts/decisions; full history searchable with search_history) ===\n{decisions or '(none yet)'}\n\n"
             f"=== SHARED BOARD (recent updates from every agent in this project) ===\n{board or '(none yet)'}\n\n"
             f"=== SECURITY FINDINGS (recent, from every agent in this project) ===\n{findings or '(none yet)'}\n\n"
             f"=== SUMMARIES OF OLDER CONVERSATION ===\n{summaries or '(none yet)'}\n\n"
