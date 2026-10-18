@@ -1,10 +1,12 @@
 """api.py: Session/run_once default show_thinking to off for headless calls, independent of
 the REPL's saved /reasoning setting, and restore the previous override afterwards. No model
 or Ollama server needed - api.run_turn (bound at import time, so it must be patched on the
-api module itself, not ollama_workspace.turn) is replaced with a fake."""
+api module itself, not ollama_workspace.turn) is replaced with a fake. guard.init() is also
+stubbed: it reads real machine state (and refuses to run elevated), neither of which this
+test cares about or should depend on."""
 import pytest
 
-from ollama_workspace import api, config, memory, models
+from ollama_workspace import api, config, guard, memory, models
 
 
 @pytest.fixture
@@ -17,6 +19,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "SETTINGS", tmp_path / "settings.json")
     monkeypatch.setattr(models, "show_thinking_override", None)
     monkeypatch.setattr(models, "load", lambda name: DummyModel(name))
+    monkeypatch.setattr(guard, "init", lambda: None)
     monkeypatch.setattr(api, "run_turn", lambda message: "the answer")
     return workspace
 
