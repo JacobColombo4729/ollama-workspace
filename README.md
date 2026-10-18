@@ -375,11 +375,16 @@ print(reply)
 It reuses the same memory, tools and mode rules (restricted/unleashed, scope, ...) as an
 interactive session, so the project it's pointed at keeps accumulating the same persistent
 memory either way. Pass `agent="name"` to run as one of that project's agent profiles instead
-(its own model and persona apply). It needs a running Ollama server, same as the REPL; see the
-docstring in `ollama_workspace/api.py` for details, including what's different about calling it
-headless (no approval prompts by default, since there's no one to answer them; reasoning isn't
-printed by default either, regardless of the REPL's `/reasoning` setting - pass
-`show_thinking=True` to print it for that call).
+(its own model and persona apply) - that call reuses the agent's own persistent chat by
+default, so repeated calls build up context like dispatching to it would. Pass
+`ephemeral=True` instead for independent, non-accumulating calls (e.g. an evaluation harness
+running many isolated prompts against the same agent): each call gets a fresh, throwaway chat
+that's never reused, while the agent's model, persona and tool restrictions still apply. It
+needs a running Ollama server, same as the REPL; see the docstring in
+`ollama_workspace/api.py` for details, including what's different about calling it headless
+(no approval prompts by default, since there's no one to answer them; reasoning isn't printed
+by default either, regardless of the REPL's `/reasoning` setting - pass `show_thinking=True`
+to print it for that call).
 
 ## Development
 
