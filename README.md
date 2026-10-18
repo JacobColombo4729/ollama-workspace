@@ -120,7 +120,7 @@ Press **Ctrl+C** while the model is thinking or answering. The model stops right
 
 Type a correction or more context, e.g. `it's weekly, not daily`. The model continues **with its reasoning so far** plus your note, rather than starting over. Press Enter on an empty line to just stop. The history records interjections as `[interjected: ...]`, and a stopped reply that hadn't said anything yet isn't saved.
 
-The model sizes each reply to the question, with a safety cap of 4096 tokens (`REPLY_LIMIT` in config.py). Unnamed chats that never got a message are discarded. Named ones are kept.
+The model sizes each reply to the question, with a safety cap of 8192 tokens (`REPLY_LIMIT` in config.py). Unnamed chats that never got a message are discarded. Named ones are kept.
 
 ### Run it from any folder (`ochat`)
 
@@ -336,7 +336,7 @@ All settings are in `ollama_workspace/config.py`:
 |---|---|---|
 | `NUM_CTX` | 32768 | Max context window in tokens (a model with a smaller max uses its own) |
 | `THINK_LEVEL` | `low` | Thinking level for chats that haven't set one with `/think` |
-| `THINK_BUDGET` | 4096 | Extra tokens for reasoning at `medium`; `low` gets half, `high` double |
+| `THINK_BUDGET` | 8192 | Extra tokens for reasoning at `medium`; `low` gets half, `high` double |
 | `MAX_RECENT` / `KEEP_RECENT` | 30k / 15k chars | When to compress older log, and how much raw log stays visible |
 | `CHUNK` | 15k chars | Log covered by each summary |
 | `SUMMARY_BUDGET` | 12k chars | Total summary size before the two oldest merge |
