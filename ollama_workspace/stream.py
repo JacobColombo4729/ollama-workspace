@@ -7,7 +7,7 @@ import threading
 import ollama
 
 from . import agents, config, guard, memory, models
-from .config import CHARS_PER_TOKEN, MEMORY_SHARE, REPEAT_PENALTY, STYLE, THINK_BUDGET, THINK_LEVEL
+from .config import CHARS_PER_TOKEN, MEMORY_SHARE, REPEAT_PENALTY, STYLE, TEMPERATURE, THINK_BUDGET, THINK_LEVEL
 from .prompts import CODING, NO_TOOLS, RESTRICTED, UNLEASHED
 from .tools import SHELL
 from .tools import active as active_tools
@@ -90,7 +90,8 @@ def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str |
                          tools=active_tools() if m.tools else None, think=m.think_value(think_level()),
                          options={"num_ctx": m.num_ctx,
                                   "num_predict": num_predict + think_budget(),
-                                  "repeat_penalty": REPEAT_PENALTY})
+                                  "repeat_penalty": REPEAT_PENALTY,
+                                  "temperature": TEMPERATURE})
     parts = responsive(stream)
     try:
         for part in parts:

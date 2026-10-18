@@ -7,6 +7,7 @@ Used by the main loop for what you type, and by dispatch_to_agent (tools/dispatc
 delegated subtask. Both just talk to whichever chat/model/agent happens to be active, so a
 dispatched subtask gets logging, memory and context handling for free - no special-casing.
 """
+import re
 import sys
 import time
 
@@ -20,6 +21,23 @@ from .stream import build_messages, continuation, fit_context, interjection, str
 from .tools import changed, run_tool
 from .tools.base import state
 
+MAX_FAKE_CALL_RETRIES = 3  # a weak/quantized model sometimes prints a tool call as text
+                           # ({"type": "function", ...}) instead of making a real one, which
+                           # the server never sees and nothing runs. Nudge it to call for
+                           # real instead of silently ending the turn, up to this many times
+                           # per message - after that, say so plainly instead of looping.
+_FAKE_CALL_RE = re.compile(
+    r'"(?:type"\s*:\s*"function"|name"\s*:\s*"[a-zA-Z_]+"\s*,\s*"parameters")')
+_FAKE_CALL_NUDGE = (
+    "You wrote a tool call as plain text/JSON instead of actually calling it through the "
+    "tool-calling API. That did nothing - no file was touched, nothing ran. Make the call "
+    "for real now: don't describe it or print JSON, call the tool."
+)
+
+
+def _looks_like_fake_tool_call(content: str) -> bool:
+    return bool(_FAKE_CALL_RE.search(content))
+
 
 def run_turn(q: str) -> str:
     """Send q to the current model, run its tool loop to completion, log the exchange in
@@ -30,6 +48,7 @@ def run_turn(q: str) -> str:
     messages = build_messages(prompt)
     changed.clear()
     replies, notes, done_reason = [], [], None
+    fake_retries = 0
     max_steps = MAX_TOOL_STEPS if guard.restricted() else UNLEASHED_TOOL_STEPS
     print("[waiting for model... Ctrl+C to interrupt and add info]", flush=True)
     try:
@@ -64,6 +83,15 @@ def run_turn(q: str) -> str:
                 messages.append({"role": "user", "content": continuation(reasoning, content)})
                 print("\033[2m[ran out of room; continuing automatically...]\033[0m", flush=True)
                 continue
+            if not calls and content.strip() and _looks_like_fake_tool_call(content) \
+                    and fake_retries < MAX_FAKE_CALL_RETRIES:
+                fake_retries += 1
+                messages.append({"role": "assistant", "content": content})
+                messages.append({"role": "user", "content": _FAKE_CALL_NUDGE})
+                print("\033[2m[model wrote a tool call as text instead of making one; "
+                      "asking it to call it for real]\033[0m", flush=True)
+                continue
+            fake_retries = 0
             if content.strip():
                 replies.append(content.strip())
                 print()
