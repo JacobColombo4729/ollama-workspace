@@ -31,6 +31,14 @@ Rough edges, documented rather than fixed here to keep this change additive:
   regardless of that saved setting, and never touch it; pass show_thinking=True to print
   reasoning for this call anyway. Either way, the model reasons exactly as /think says to -
   this only controls what's printed.
+- An ephemeral=True call always gets a fresh, throwaway chat, even when `agent` is given -
+  it never reads or writes that agent's persisted "chat" field, so it can't see or add to
+  that agent's accumulated context. Good for evaluation harnesses that need independent,
+  non-accumulating turns; the agent's model, persona, and tool restrictions still apply.
+  The throwaway chat's folder is left on disk (nothing deletes it), but nothing reopens it -
+  each ephemeral call gets its own. This doesn't isolate everything in a project: shared
+  feeds (notes, the board, findings) are still injected into context same as always, so a
+  caller that needs real isolation between calls shouldn't write secrets to those feeds.
 """
 from contextlib import contextmanager
 from pathlib import Path
@@ -44,7 +52,8 @@ __all__ = ["Session", "run_once"]
 
 @contextmanager
 def Session(workspace, model: str | None = None, agent: str | None = None,
-           approve: bool = False, show_thinking: bool | None = None):
+           approve: bool = False, show_thinking: bool | None = None,
+           ephemeral: bool = False):
     """Point every module-level global at `workspace`'s project for the duration of the
     `with` block, restoring the previous values on exit. If `agent` is given, that agent's
     own model is used (and its tools/persona apply) rather than `model`; `model` is a
@@ -55,8 +64,12 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
     to print it anyway, or False to be explicit. It never changes how much the model
     reasons - that's /think's job, unaffected by this.
 
-    Yields the memory.Chat this call logs to (a fresh one, or the agent's persistent one -
-    see agents.agent_chat).
+    `ephemeral` (default False) gets this call a fresh, throwaway chat instead of reusing
+    `agent`'s persistent one, so independent calls don't see each other's turns - see the
+    module docstring for what this does and doesn't isolate.
+
+    Yields the memory.Chat this call logs to (a fresh one, or - unless ephemeral - the
+    agent's persistent one; see agents.agent_chat).
     """
     try:
         guard.init()
@@ -80,7 +93,7 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
     if not use_model:
         raise ValueError("pass a model, or an agent that has one set")
 
-    chat = (agents.agent_chat(project, target_agent) if target_agent
+    chat = (agents.agent_chat(project, target_agent) if target_agent and not ephemeral
             else memory.Chat.create(project, title="api"))
     try:
         memory.active = chat
@@ -102,13 +115,15 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
 
 
 def run_once(workspace, message: str, model: str | None = None, agent: str | None = None,
-             approve: bool = False, show_thinking: bool | None = None) -> str:
+             approve: bool = False, show_thinking: bool | None = None,
+             ephemeral: bool = False) -> str:
     """Send one message to `model` (or to `agent`'s own model) in `workspace`'s project and
     return the model's final reply - the non-interactive equivalent of typing a message at
     the ochat prompt. Memory, tools, and mode rules (restricted/unleashed, scope, ...)
     behave exactly as they do in the REPL; see the module docstring for what's different
     about running headless (no approval prompts by default, model choice isn't persisted,
-    reasoning isn't printed unless show_thinking=True).
+    reasoning isn't printed unless show_thinking=True, and ephemeral=True skips an agent's
+    persistent chat for a fresh, non-accumulating one).
     """
-    with Session(workspace, model, agent, approve, show_thinking):
+    with Session(workspace, model, agent, approve, show_thinking, ephemeral):
         return run_turn(message)
