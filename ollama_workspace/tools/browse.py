@@ -133,10 +133,10 @@ def file_outline(path: str) -> str:
     lines = text.splitlines()
     if p.suffix.lower() in DOC_SUFFIXES:
         # setext headings need the next line, so match on line pairs
-        hits = [n for n, l in enumerate(lines, 1)
+        hits = [n for n, l in enumerate(lines, 1)  # noqa: E741
                 if DOC_OUTLINE.match(l + "\n" + (lines[n] if n < len(lines) else ""))]
     else:
-        hits = [n for n, l in enumerate(lines, 1) if CODE_OUTLINE.match(l)]
+        hits = [n for n, l in enumerate(lines, 1) if CODE_OUTLINE.match(l)]  # noqa: E741
     body = "\n".join(f"{n:>6}: {lines[n - 1].rstrip()[:160]}" for n in hits[:400])
     return (f"{path}: {len(lines)} lines, {len(text):,} chars\n"
             + (body or "(no structure found; use read_file with line ranges)"))
