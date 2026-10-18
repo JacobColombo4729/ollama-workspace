@@ -54,6 +54,8 @@ class Model:
 
 current: Model | None = None
 installed: list[str] = []  # chat-capable models, filled by refresh()
+show_thinking_override: bool | None = None  # set by api.Session to override the saved
+                                             # setting for one headless call; None in the REPL
 
 
 def refresh() -> list[str]:
@@ -89,19 +91,43 @@ def load(name: str) -> Model:
                  can_disable=not values or False in values)
 
 
+def _read_settings() -> dict:
+    try:
+        return json.loads(SETTINGS.read_text("utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_settings(**updates) -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    settings = _read_settings()
+    settings.update(updates)
+    SETTINGS.write_text(json.dumps(settings, indent=2), "utf-8")
+
+
 def use(name: str) -> Model:
     global current
     current = load(name)
-    DATA_DIR.mkdir(exist_ok=True)
-    SETTINGS.write_text(json.dumps({"model": name}, indent=2), "utf-8")
+    _write_settings(model=name)
     return current
 
 
 def saved_default() -> str | None:
-    try:
-        return json.loads(SETTINGS.read_text("utf-8")).get("model")
-    except (OSError, ValueError):
-        return None
+    return _read_settings().get("model")
+
+
+def show_thinking() -> bool:
+    """Whether the REPL prints the model's reasoning as it streams (default True). This
+    only gates display - see stream.py - and never changes how much the model reasons
+    (that's /think's job) or the final answer. A headless api.Session call can override
+    this for its own duration without touching the saved setting (show_thinking_override)."""
+    if show_thinking_override is not None:
+        return show_thinking_override
+    return _read_settings().get("show_thinking", True)
+
+
+def set_show_thinking(value: bool) -> None:
+    _write_settings(show_thinking=value)
 
 
 def find(ref: str) -> str | None:

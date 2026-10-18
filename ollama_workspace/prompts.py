@@ -56,6 +56,9 @@ HELP = """Commands:
   /model [n|name]     switch model for this chat (no argument: pick from a list)
   /think [level]      how much the model reasons first: off, low, medium, high
                       (less = faster; no argument: show the current level)
+  /reasoning [on|off] show the model's reasoning as it streams, or hide it - this only
+                      changes what's printed, not how much it reasons (see /think)
+                      (no argument: show the current state)
   /notes              show the project notes (shared by all chats here)
   /board              show the shared agent board (recent posts, seen by every agent here)
   /findings           show recorded security findings (post_finding), seen by every agent

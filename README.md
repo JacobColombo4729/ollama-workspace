@@ -52,6 +52,7 @@ Works on **Windows, macOS and Linux** (tested on Windows 11 and Ubuntu) anywhere
 | `--model <name>` | Choose the model when launching (overrides the chat's saved model) |
 | `/think [off\|low\|medium\|high]` | How much a thinking model reasons before answering. Less is faster. Saved per chat; default `low` (`THINK_LEVEL`). With no argument, shows the current level and what the model supports. |
 | `--think <level>` | Set the thinking level when launching |
+| `/reasoning [on\|off]` | Whether the model's reasoning is *printed* as it streams. Separate from `/think`: this never changes how much the model reasons, only what you see. Saved across restarts; default `on`. With no argument, shows the current state. |
 
 **Which model is used:** a chat reopens with the model it last used. A new chat starts with the model you picked most recently. Models you install later show up in `/models` right away, without restarting.
 
@@ -60,7 +61,7 @@ Works on **Windows, macOS and Linux** (tested on Windows 11 and Ubuntu) anywhere
 | Model supports | Effect |
 |---|---|
 | **tools** | File editing, history search and project notes are enabled. Without tool support, the model just chats, and it's told it can't see your files. |
-| **thinking** | Its reasoning streams dimmed above the answer. `/think` controls how much it reasons: models that report levels get the closest one (`high` uses the model's strongest, e.g. `xhigh`); others only switch thinking on or off. Models that always think can't be turned off. |
+| **thinking** | Its reasoning streams dimmed above the answer, unless `/reasoning off`. `/think` controls how much it reasons: models that report levels get the closest one (`high` uses the model's strongest, e.g. `xhigh`); others only switch thinking on or off. Models that always think can't be turned off. |
 | **context length** | The context window is `NUM_CTX` (32k), or the model's own maximum if that's smaller. Memory, file reads and attachments are scaled to fit, so small-context models still work. Anything trimmed stays on disk. |
 
 Embedding-only models are hidden, since they can't chat.
@@ -376,7 +377,9 @@ interactive session, so the project it's pointed at keeps accumulating the same 
 memory either way. Pass `agent="name"` to run as one of that project's agent profiles instead
 (its own model and persona apply). It needs a running Ollama server, same as the REPL; see the
 docstring in `ollama_workspace/api.py` for details, including what's different about calling it
-headless (no approval prompts by default, since there's no one to answer them).
+headless (no approval prompts by default, since there's no one to answer them; reasoning isn't
+printed by default either, regardless of the REPL's `/reasoning` setting - pass
+`show_thinking=True` to print it for that call).
 
 ## Development
 
