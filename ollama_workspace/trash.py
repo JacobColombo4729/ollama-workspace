@@ -68,7 +68,11 @@ def _root(project: Path) -> Path:
 
 def put(project: Path, p: Path, rel: str) -> None:
     """Move p (at workspace path rel) into the trash."""
-    folder = _root(project) / f"{datetime.now():%Y%m%d-%H%M%S-%f}"
+    base = f"{datetime.now():%Y%m%d-%H%M%S-%f}"
+    folder, n = _root(project) / base, 1
+    while folder.exists():  # two deletes in the same clock tick (common on Windows)
+        n += 1
+        folder = _root(project) / f"{base}-{n}"
     (folder / "item").mkdir(parents=True)
     try:
         _move(p, folder / "item" / p.name)
