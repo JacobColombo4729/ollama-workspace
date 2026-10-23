@@ -1,5 +1,6 @@
 """Talking to the model: builds each request, keeps it within the context window, streams
 the reply (Ctrl+C pauses it), and sizes the thinking budget."""
+import json
 import platform
 import queue
 import threading
@@ -78,6 +79,18 @@ def fit_context(messages: list, num_predict: int) -> None:
             print("\033[2m[cleared an old tool output to stay within the context window]\033[0m")
 
 
+def _dump_request(request: dict) -> None:
+    """Debug aid: write the exact last request sent to the model to data/last_request.json,
+    so a bad reply can be replayed outside ochat (plain API call) to tell a model/template
+    problem from a prompt-assembly one. Best-effort; never interrupts the turn."""
+    try:
+        config.DATA_DIR.mkdir(exist_ok=True)
+        (config.DATA_DIR / "last_request.json").write_text(
+            json.dumps(request, indent=1, default=str), "utf-8")
+    except Exception:
+        pass
+
+
 def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str | None]:
     """Stream one model response. Returns (reply text, reasoning, tool calls, done reason);
     done reason is "interrupted" if the user pressed Ctrl+C."""
@@ -86,12 +99,14 @@ def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str |
     # and cap the reply ourselves (each streamed content chunk is ~1 token)
     m = models.current
     show = models.show_thinking()  # read once: a setting change mid-stream shouldn't flicker
-    stream = ollama.chat(model=m.name, messages=messages, stream=True,
-                         tools=active_tools() if m.tools else None, think=m.think_value(think_level()),
-                         options={"num_ctx": m.num_ctx,
-                                  "num_predict": num_predict + think_budget(),
-                                  "repeat_penalty": REPEAT_PENALTY,
-                                  "temperature": TEMPERATURE})
+    request = dict(model=m.name, messages=messages, stream=True,
+                   tools=active_tools() if m.tools else None, think=m.think_value(think_level()),
+                   options={"num_ctx": m.num_ctx,
+                            "num_predict": num_predict + think_budget(),
+                            "repeat_penalty": REPEAT_PENALTY,
+                            "temperature": TEMPERATURE})
+    _dump_request(request)
+    stream = ollama.chat(**request)
     parts = responsive(stream)
     try:
         for part in parts:
