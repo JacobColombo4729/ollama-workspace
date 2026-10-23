@@ -41,6 +41,7 @@ import ollama
 
 from . import models
 from .config import CHUNK, KEEP_RECENT, MAX_RECENT, PROJECTS_DIR, SUMMARY_BUDGET
+from .textnorm import normalize
 
 STAMP = re.compile(r"^\[(\d{4}-\d\d-\d\d \d\d:\d\d)\]", re.MULTILINE)
 EXCHANGE_START = re.compile(r"\n(?=\[\d{4}-\d\d-\d\d \d\d:\d\d\] USER: )")
@@ -156,6 +157,9 @@ class Chat:
         return EXCHANGE_START.split(log) if log else []
 
     def append(self, user_msg: str, reply: str) -> None:
+        # normalize at the boundary where it's written - whitespace/encoding hygiene only
+        # (see textnorm.py); never changes what was actually said
+        user_msg, reply = normalize(user_msg), normalize(reply)
         stamp = _now()
         with self.log_path.open("a", encoding="utf-8") as f:
             f.write(f"\n[{stamp}] USER: {user_msg}\n[{stamp}] AI: {reply}\n")
@@ -203,7 +207,7 @@ class Chat:
             recent = "...[earlier part left out]" + recent[start if start != -1 else -room:]
         recall = (" The summaries are compressed; if you need an exact earlier detail, "
                   "use search_history." if searchable else "")
-        return (
+        return normalize(
             "You are a helpful assistant with long-term memory of past conversations "
             f"with this user. Use it naturally; don't recite it unless asked.{recall}\n\n"
             f"=== PROJECT NOTES (team structure/conventions, shared by all chats) ===\n{notes or '(none)'}\n\n"
