@@ -22,6 +22,31 @@ from .tools import changed, run_tool
 from .tools.base import state
 
 MAX_FAKE_CALL_RETRIES = 3  # a weak/quantized model sometimes prints a tool call as text
+
+
+_CHAR_RUN = re.compile(r"(.)\1{19,}")  # the same character 20+ times in a row
+
+
+def _looks_degenerate(text: str) -> bool:
+    """True if a reply looks like model degeneration - backtick/symbol salad or a tiny
+    vocabulary repeated - rather than real content, so it isn't written to the chat log
+    where it would feed back into and poison every later turn. Deliberately conservative,
+    and keyed on repetition, not symbol density: code is symbol-heavy but not repetitive,
+    so it passes. Ollama's own repeat-limit abort already drops the worst case upstream
+    (nothing saved); this catches the milder 'finished but garbled' reply. The milder
+    word-salad that still reads as broken English is left to the human + /clear."""
+    t = text.strip()
+    if len(t) < 60:
+        return False  # too short to judge; terse real replies ("Done.", "Hello!") must pass
+    if _CHAR_RUN.search(t.replace(" ", "")):
+        return True  # a long run of one character, e.g. ``` ` ` ` ``` collapses to backticks
+    tokens = t.split()
+    if len(tokens) >= 40 and len(set(tokens)) / len(tokens) < 0.15:
+        return True  # almost no vocabulary: the same few tokens over and over
+    alpha = sum(c.isalpha() for c in t)
+    if len(t) >= 100 and alpha / len(t) < 0.25:
+        return True  # long reply that's mostly punctuation/digits/whitespace
+    return False
                            # ({"type": "function", ...}) instead of making a real one, which
                            # the server never sees and nothing runs. Nudge it to call for
                            # real instead of silently ending the turn, up to this many times
@@ -132,6 +157,12 @@ def run_turn(q: str) -> str:
     logged += "".join(f"\n[interjected: {n}]" for n in notes)
     if changed:
         reply += f" [changes: {', '.join(sorted(changed))}]"
+    if reply and not changed and _looks_degenerate(reply):
+        print("\033[2m[the reply looked garbled, so it was not saved to this chat - a "
+              "saved one would feed back into later turns. /clear this chat or /model to "
+              "switch if it keeps happening.]\033[0m", flush=True)
+        return ("[The model produced garbled output, so nothing was saved to this chat. "
+                "Try again - or clear the chat if it keeps happening.]")
     memory.active.meta["model"] = models.current.name
     memory.active.append(logged, reply)  # saved immediately, so nothing is lost on a crash
     memory.active.compact_if_needed()

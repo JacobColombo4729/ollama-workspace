@@ -164,6 +164,17 @@ class Chat:
         self.meta["updated"] = stamp
         self.save()
 
+    def clear(self) -> None:
+        """Wipe this chat's conversation history but keep the chat itself - same id, title,
+        and agent tag. The log is emptied and the summary/compaction state reset, so the
+        next turn starts from a clean context. Project-shared memory (notes, decisions,
+        board, findings) belongs to the project, not this chat, and is left untouched."""
+        self.log_path.write_text("", "utf-8")
+        self.meta["upto"] = 0
+        self.meta["summaries"] = []
+        self.meta["updated"] = _now()
+        self.save()
+
     def memory_prompt(self, budget: int, searchable: bool) -> str:
         """Notes + the shared board/findings + summaries + recent log, cut to about
         `budget` chars so small-context models still fit. What's cut stays on disk (and

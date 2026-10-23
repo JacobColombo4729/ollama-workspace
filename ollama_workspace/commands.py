@@ -14,7 +14,7 @@ from .stream import describe_thinking
 from .tools import SHELL
 
 
-COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/agent", "/models", "/model",
+COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/clear", "/agent", "/models", "/model",
             "/think", "/reasoning", "/notes", "/decisions", "/board", "/findings", "/scope", "/trash",
             "/restore", "/mode", "/approve", "/pace", "/cd", "/unlock", "/lock", "/help")
 
@@ -43,6 +43,8 @@ def handle_command(q: str, project) -> None:
         print(f"Renamed to: {arg}")
     elif cmd == "/delete":
         delete_chats(project, arg)
+    elif cmd == "/clear":
+        clear_chat()
     elif cmd == "/agent":
         handle_agent(project, arg)
     elif cmd == "/models":
@@ -160,6 +162,22 @@ def handle_command(q: str, project) -> None:
         print("Locked: the model can't see or edit this tool's own code.")
     else:
         print(HELP)
+
+
+def clear_chat() -> None:
+    """/clear: wipe the current chat's history but keep the chat (same name and agent).
+    Unlike /delete (removes the chat) and /new (starts a different one), this leaves you
+    where you are with an empty log - handy when a run of bad output has poisoned the
+    context. Project notes/decisions/board/findings are shared and left untouched."""
+    if memory.active is None:
+        return
+    if not memory.active.exchanges():
+        print("This chat is already empty.")
+        return
+    if ask(f"Clear all history in '{memory.active.title}'? The chat stays; its messages "
+           f"are wiped. [y/N]: ").lower() in ("y", "yes"):
+        memory.active.clear()
+        print("Chat history cleared.")
 
 
 def delete_chats(project, arg: str) -> None:
