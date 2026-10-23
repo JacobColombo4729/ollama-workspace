@@ -21,6 +21,8 @@ COMMANDS = ("/new", "/chats", "/resume", "/rename", "/delete", "/clear", "/agent
 
 def handle_command(q: str, project) -> None:
     cmd, _, arg = q.partition(" ")
+    cmd = cmd.lower()  # commands are case-insensitive (/Clear, /CLEAR, /clear all work);
+                       # arg is left as typed - a chat/model name may be case-sensitive
     arg = clean_name(arg)
     if cmd == "/new":
         open_named(project, arg) if arg else switch_to(memory.Chat.create(project))

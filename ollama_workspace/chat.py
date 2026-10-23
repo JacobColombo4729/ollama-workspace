@@ -115,7 +115,7 @@ def main() -> None:
         if q.startswith("!"):
             run_shell(q[1:].strip())
             continue
-        if q.startswith("/") and q.split()[0] in COMMANDS:
+        if q.startswith("/") and q.split()[0].lower() in COMMANDS:
             project = handle_command(q, project) or project  # /cd switches projects
             continue
         run_turn(q)
