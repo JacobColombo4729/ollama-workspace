@@ -5,17 +5,28 @@ from datetime import datetime
 from .. import agents, memory
 
 
+# Project-wide, line-per-entry feeds that grow forever on disk but only show their
+# recent tail in context (see memory.py) - searched here so an older entry is always one
+# search away, never actually unreachable once it ages out of what's shown automatically.
+PROJECT_FEEDS = {
+    "decisions.txt": "project decisions log",
+    "board.txt": "shared board",
+    "findings.txt": "security findings",
+}
+
+
 def search_history(query: str, all_chats: bool = False) -> str:
-    """Search the full saved transcript of past conversations AND the full project
-    decisions log (every save_note ever saved, not just the recent slice shown in your
-    context), including parts that are only summarized in your memory. Use it to recover
-    an exact earlier detail or an older decision that's aged out of what's shown to you.
+    """Search the full saved transcript of past conversations AND this project's full
+    decisions log, board, and findings (every entry ever posted, not just the recent
+    slice shown in your context), including parts that are only summarized in your
+    memory. Use it to recover an exact earlier detail, or an older decision, board post,
+    or finding that's aged out of what's shown to you automatically.
 
     Args:
         query: Words to look for (case-insensitive); an exchange/entry matches if it has
             all of them.
-        all_chats: Also search the other chats in this project (decisions.md is always
-            searched either way - it's project-wide, not per-chat).
+        all_chats: Also search the other chats in this project (the project feeds below
+            are always searched either way - they're project-wide, not per-chat).
 
     Returns:
         Up to 15 matching exchanges/entries with their dates, most recent last.
@@ -36,14 +47,16 @@ def search_history(query: str, all_chats: bool = False) -> str:
                     ex = ("..." if s else "") + ex[s:s + 1500] + "..."
                 hits.append((stamp.group(1) if stamp else "",
                              f"--- chat: {chat.title} ---\n{ex.strip()}"))
-    decisions_path = memory.active.project / "decisions.md"
-    if decisions_path.exists():
-        for line in decisions_path.read_text("utf-8").splitlines():
+    for filename, label in PROJECT_FEEDS.items():
+        path = memory.active.project / filename
+        if not path.exists():
+            continue
+        for line in path.read_text("utf-8").splitlines():
             low = line.lower()
             if line.strip() and all(w in low for w in words):
                 stamp = memory.STAMP.search(line)
                 hits.append((stamp.group(1) if stamp else "",
-                             f"--- project decisions log ---\n{line.strip()}"))
+                             f"--- {label} ---\n{line.strip()}"))
     if not hits:
         return "No matches."
     shown = [h for _, h in sorted(hits, key=lambda h: h[0])][-15:]
@@ -64,7 +77,7 @@ def save_note(note: str) -> str:
         Confirmation.
     """
     note = " ".join(str(note).split())
-    with (memory.active.project / "decisions.md").open("a", encoding="utf-8") as f:
+    with (memory.active.project / "decisions.txt").open("a", encoding="utf-8") as f:
         f.write(f"[{datetime.now():%Y-%m-%d %H:%M}] {note}\n")
     print(f"\033[2m[noted] {note}\033[0m")
     return "Saved to the project decisions log."

@@ -2,16 +2,16 @@
 
 data/projects/<folder>-<hash>/       one per workspace folder
     project.json                     which folder this project is
-    notes.md                         STRUCTURAL content only (team org chart, language
+    notes.txt                        STRUCTURAL content only (team org chart, language
                                       conventions) - seeded by install.py, small and
                                       stable. Not where save_note() writes anymore (see
-                                      decisions.md) - this file should stay small enough
+                                      decisions.txt) - this file should stay small enough
                                       that it's never truncated.
-    decisions.md                     lasting facts/decisions (save_note), one per line,
+    decisions.txt                    lasting facts/decisions (save_note), one per line,
                                       timestamped like board.txt - append-only, never
                                       deleted or rewritten. The in-context view keeps the
                                       most RECENT entries (like board.txt/findings.txt,
-                                      not like notes.md used to), and the model can search
+                                      not like notes.txt used to), and the model can search
                                       its full history with search_history.
     board.txt                        recent timestamped posts shared by every chat/agent
                                       (post_to_board); same [timestamp] who: text lines as
@@ -70,8 +70,12 @@ def project_dir(workspace: Path) -> Path:
     (d / "chats").mkdir(parents=True, exist_ok=True)
     if not (d / "project.json").exists():
         (d / "project.json").write_text(json.dumps({"path": str(workspace)}, indent=2), "utf-8")
-    (d / "notes.md").touch()
-    (d / "decisions.md").touch()
+    for old_name, new_name in (("notes.md", "notes.txt"), ("decisions.md", "decisions.txt")):
+        old, new = d / old_name, d / new_name
+        if old.exists() and not new.exists():  # migrate a project seeded before this rename
+            old.rename(new)
+    (d / "notes.txt").touch()
+    (d / "decisions.txt").touch()
     (d / "board.txt").touch()
     (d / "scope.txt").touch()
     (d / "findings.txt").touch()
@@ -165,10 +169,10 @@ class Chat:
         `budget` chars so small-context models still fit. What's cut stays on disk (and
         in search_history for notes/log; the board/findings only ever keep their most
         recent entries)."""
-        notes = (self.project / "notes.md").read_text("utf-8").strip()
+        notes = (self.project / "notes.txt").read_text("utf-8").strip()
         if len(notes) > budget // 8:
             notes = notes[:budget // 8] + "\n...[notes cut off to fit the model's context]"
-        decisions = _tail_feed(self.project / "decisions.md", budget // 6, "decisions")
+        decisions = _tail_feed(self.project / "decisions.txt", budget // 6, "decisions")
         board = _tail_feed(self.project / "board.txt", budget // 6, "posts")
         findings = _tail_feed(self.project / "findings.txt", budget // 6, "findings")
         left = budget - len(notes) - len(decisions) - len(board) - len(findings)

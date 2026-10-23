@@ -50,7 +50,10 @@ def dispatch_to_agent(agent: str, task: str) -> str:
     if len(_chain) >= MAX_DISPATCH_DEPTH:
         return (f"Error: this dispatch chain is already {MAX_DISPATCH_DEPTH} deep "
                 f"({' -> '.join(_chain)}); go no further - finish without delegating again.")
-    models.refresh()
+    try:
+        models.refresh()
+    except RuntimeError as e:
+        return f"Error: {e}"
     if target.model not in models.installed:
         return f"Error: agent '{target.name}' uses {target.model}, which isn't installed."
 
@@ -62,7 +65,10 @@ def dispatch_to_agent(agent: str, task: str) -> str:
     try:
         memory.active = chat
         agents.activate(target)
-        models.use(target.model)
+        try:
+            models.use(target.model)
+        except RuntimeError as e:
+            return f"Error: {e}"
         reply = run_turn(task)
         return reply or f"({target.name} gave no reply.)"
     finally:

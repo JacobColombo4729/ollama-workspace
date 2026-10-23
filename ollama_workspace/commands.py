@@ -46,13 +46,24 @@ def handle_command(q: str, project) -> None:
     elif cmd == "/agent":
         handle_agent(project, arg)
     elif cmd == "/models":
-        models.refresh()
+        try:
+            models.refresh()
+        except RuntimeError as e:
+            print(f"[{e}]")
+            return
         models.print_installed()
     elif cmd == "/model":
-        models.refresh()
+        try:
+            models.refresh()
+        except RuntimeError as e:
+            print(f"[{e}]")
+            return
         name = models.find(arg) if arg else models.pick()
         if name:
-            set_model(name)
+            try:
+                set_model(name)
+            except RuntimeError as e:
+                print(f"[{e}]")
     elif cmd == "/think":
         if arg and arg.lower() not in models.THINK_CHOICES:
             print(f"Choose one of: {', '.join(models.THINK_CHOICES)}")
@@ -70,11 +81,11 @@ def handle_command(q: str, project) -> None:
         print(f"Reasoning display: {'on' if models.show_thinking() else 'off'} "
               "(this only controls what's printed, not how much the model reasons - see /think)")
     elif cmd == "/notes":
-        path = project / "notes.md"
+        path = project / "notes.txt"
         print(path.read_text("utf-8").strip() or "(no notes yet)")
         print(f"\033[2m[edit by hand: {path}]\033[0m")
     elif cmd == "/decisions":
-        path = project / "decisions.md"
+        path = project / "decisions.txt"
         print(path.read_text("utf-8").strip() or "(no decisions saved yet)")
         print(f"\033[2m[every agent in this project sees recent ones automatically; "
               f"older ones via search_history; edit by hand: {path}]\033[0m")
@@ -272,7 +283,10 @@ def handle_agent(project, arg: str) -> None:
     memory.active.save()
     models.refresh()
     if agent.model in models.installed:
-        set_model(agent.model)
+        try:
+            set_model(agent.model)
+        except RuntimeError as e:
+            print(f"[{e}]")
     else:
         print(f"\033[2m[agent '{agent.name}' uses {agent.model}, which isn't installed; "
               "keeping the current model]\033[0m")

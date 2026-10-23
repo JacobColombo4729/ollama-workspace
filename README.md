@@ -185,7 +185,7 @@ Giving an agent the `dispatch_to_agent` tool lets it hand a task to another agen
 - **No loops.** An agent can't dispatch to itself, directly or through a longer chain (A → B → A is caught, not just A → A), and a chain can only go `MAX_DISPATCH_DEPTH` (3) agents deep before it's refused.
 - Mode, approvals and the password gate apply exactly the same inside a dispatched agent's turn as anywhere else - delegating a task is never a way around them.
 
-Giving an agent the `post_to_board` tool lets it leave a short, timestamped, attributed status update on the project's shared board (`/board`), which every agent and chat in the project sees automatically on its next turn - no dispatch needed. It's for frequent activity ("wrote add.py and verified it runs"), not lasting facts (that's `save_note`/`decisions.md`), and only the most recent posts that fit the context budget are shown; older ones stay on disk but drop out of what the model sees.
+Giving an agent the `post_to_board` tool lets it leave a short, timestamped, attributed status update on the project's shared board (`/board`), which every agent and chat in the project sees automatically on its next turn - no dispatch needed. It's for frequent activity ("wrote add.py and verified it runs"), not lasting facts (that's `save_note`/`decisions.txt`), and only the most recent posts that fit the context budget are shown; older ones stay on disk but drop out of what the model sees.
 
 ### Modes: restricted and unleashed
 
@@ -307,8 +307,8 @@ data/settings.json                    last model you picked
 data/password.json                    restricted mode's password (salted hash only)
 data/projects/<folder>-<hash>/
   project.json                        which folder this project belongs to
-  notes.md                            structural project notes (small, stable)
-  decisions.md                        lasting facts/decisions (save_note) - see Memory
+  notes.txt                           structural project notes (small, stable)
+  decisions.txt                       lasting facts/decisions (save_note) - see Memory
   board.txt                           shared agent board: recent posts, every chat sees them
   scope.txt                           authorized targets for security testing - see Scope
   findings.txt                        security findings (post_finding) - see Findings
@@ -322,7 +322,7 @@ A project is identified by its full folder path, so two folders that share a nam
 
 **Each turn the model sees** the project notes, the decisions log, the shared agent board, recorded security findings, the dated summaries of older conversation, and the recent raw log of the current chat. All of it is trimmed to `MEMORY_SHARE` (50%) of the model's context window.
 
-`notes.md` is structural project content only - seeded once (if a setup script seeds it at all) and meant to stay small; it isn't where `save_note` writes. `decisions.md` (`save_note`, `/decisions`) is for sparse, lasting facts - decisions, conventions, preferences - append-only and never deleted or rewritten, but the model's context only sees the most *recent* entries (older ones are still searchable with `search_history`). `board.txt` (`post_to_board`, `/board`) and `findings.txt` (`post_finding`, `/findings`) are both frequent, recent-activity feeds with the same recent-entries treatment - older ones drop off the front of what's shown (they still live in the file on disk, just not in what the model sees) rather than getting summarized like the main log. All three (`decisions.md`/`board.txt`/`findings.txt`) are kept separate on purpose: decisions are sparse and deliberate, the board is routine narration, findings are the actual deliverable.
+`notes.txt` is structural project content only - seeded once (if a setup script seeds it at all) and meant to stay small; it isn't where `save_note` writes. `decisions.txt` (`save_note`, `/decisions`) is for sparse, lasting facts - decisions, conventions, preferences - append-only and never deleted or rewritten, but the model's context only sees the most *recent* entries (older ones are still searchable with `search_history`). `board.txt` (`post_to_board`, `/board`) and `findings.txt` (`post_finding`, `/findings`) are both frequent, recent-activity feeds with the same recent-entries treatment - older ones drop off the front of what's shown (they still live in the file on disk, just not in what the model sees) rather than getting summarized like the main log. All three (`decisions.txt`/`board.txt`/`findings.txt`) are kept separate on purpose: decisions are sparse and deliberate, the board is routine narration, findings are the actual deliverable.
 
 **How compression avoids losing memory:**
 

@@ -42,7 +42,10 @@ def switch_to(chat, adopt_model: bool = True) -> None:
     want = chat.meta.get("model")
     if adopt_model and want and (models.current is None or want != models.current.name):
         if want in models.installed:
-            set_model(want)
+            try:
+                set_model(want)
+            except RuntimeError as e:
+                print(f"[{e}]")
         else:
             print(f"\033[2m[this chat used {want}, which isn't installed]\033[0m")
     if models.current is not None:

@@ -58,13 +58,27 @@ show_thinking_override: bool | None = None  # set by api.Session to override the
                                              # setting for one headless call; None in the REPL
 
 
+def unreachable_server_message() -> str:
+    """ollama's own client already turns a connection failure into a plain ConnectionError
+    - but its default text ("Please check that Ollama is downloaded...") assumes a local
+    install, which is wrong for a remote pod. Cover both setups instead."""
+    return ("Can't reach the Ollama server at all - this is a connection problem, not a "
+            "missing model. If you're running Ollama locally, make sure 'ollama serve' is "
+            "running. If you're using a remote server or pod (e.g. over an SSH tunnel), "
+            "check that the tunnel is open and the server/pod is still running - a "
+            "terminated or dead pod looks exactly like this.")
+
+
 def refresh() -> list[str]:
     """Reload the installed models, skipping embedding-only ones that can't chat."""
-    names = []
-    for m in ollama.list().models:
-        caps = ollama.show(m.model).capabilities
-        if caps is None or "completion" in caps:  # None: older Ollama that doesn't report it
-            names.append(m.model)
+    try:
+        names = []
+        for m in ollama.list().models:
+            caps = ollama.show(m.model).capabilities
+            if caps is None or "completion" in caps:  # None: older Ollama that doesn't report it
+                names.append(m.model)
+    except ConnectionError as e:
+        raise RuntimeError(unreachable_server_message()) from e
     installed[:] = sorted(names, key=str.lower)
     return installed
 
@@ -79,8 +93,27 @@ def _thinking_info(name: str) -> dict:
         return {}
 
 
+def missing_model_message(name: str) -> str:
+    """Why a 404 for a model that's meant to be installed almost never means the name is
+    wrong: restarting the Ollama server (or the machine/pod running it) wipes whatever
+    models it had loaded, and re-pulling fixes it - that's the actionable thing to say,
+    not ollama's raw 'not found'."""
+    return (f"'{name}' isn't loaded on the Ollama server right now, even though it's "
+            f"supposed to be installed. This almost always means the Ollama server (or "
+            f"the machine/pod running it) was restarted and lost its models - restart the "
+            f"Ollama server (re-pulling the model if restarting alone doesn't bring it "
+            f"back), then try again.")
+
+
 def load(name: str) -> Model:
-    info = ollama.show(name)
+    try:
+        info = ollama.show(name)
+    except ollama.ResponseError as e:
+        if e.status_code == 404:
+            raise RuntimeError(missing_model_message(name)) from e
+        raise
+    except ConnectionError as e:
+        raise RuntimeError(unreachable_server_message()) from e
     caps = info.capabilities or ["completion"]
     max_ctx = next((v for k, v in (info.modelinfo or {}).items()
                     if k.endswith(".context_length")), 0)

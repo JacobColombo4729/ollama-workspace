@@ -53,7 +53,7 @@ __all__ = ["Session", "run_once"]
 @contextmanager
 def Session(workspace, model: str | None = None, agent: str | None = None,
            approve: bool = False, show_thinking: bool | None = None,
-           ephemeral: bool = False):
+           ephemeral: bool = False, chat_id: str | None = None):
     """Point every module-level global at `workspace`'s project for the duration of the
     `with` block, restoring the previous values on exit. If `agent` is given, that agent's
     own model is used (and its tools/persona apply) rather than `model`; `model` is a
@@ -68,8 +68,13 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
     `agent`'s persistent one, so independent calls don't see each other's turns - see the
     module docstring for what this does and doesn't isolate.
 
-    Yields the memory.Chat this call logs to (a fresh one, or - unless ephemeral - the
-    agent's persistent one; see agents.agent_chat).
+    `chat_id` (default None), if given, targets one specific existing chat (its folder
+    name under chats/) instead of either of those - e.g. a sibling chat a browser UI
+    created with agents.new_agent_chat. Takes priority over `ephemeral` if both are passed.
+    Raises ValueError if no such chat exists in this project.
+
+    Yields the memory.Chat this call logs to (the one `chat_id` names, or - unless
+    ephemeral - the agent's persistent one; see agents.agent_chat).
     """
     try:
         guard.init()
@@ -93,8 +98,15 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
     if not use_model:
         raise ValueError("pass a model, or an agent that has one set")
 
-    chat = (agents.agent_chat(project, target_agent) if target_agent and not ephemeral
-            else memory.Chat.create(project, title="api"))
+    if chat_id:
+        chat_dir = project / "chats" / chat_id
+        if not (chat_dir / "chat.json").exists():
+            raise ValueError(f"no chat '{chat_id}' in this project")
+        chat = memory.Chat(chat_dir)
+    elif target_agent and not ephemeral:
+        chat = agents.agent_chat(project, target_agent)
+    else:
+        chat = memory.Chat.create(project, title="api")
     try:
         memory.active = chat
         agents.activate(target_agent)
@@ -116,14 +128,15 @@ def Session(workspace, model: str | None = None, agent: str | None = None,
 
 def run_once(workspace, message: str, model: str | None = None, agent: str | None = None,
              approve: bool = False, show_thinking: bool | None = None,
-             ephemeral: bool = False) -> str:
+             ephemeral: bool = False, chat_id: str | None = None) -> str:
     """Send one message to `model` (or to `agent`'s own model) in `workspace`'s project and
     return the model's final reply - the non-interactive equivalent of typing a message at
     the ochat prompt. Memory, tools, and mode rules (restricted/unleashed, scope, ...)
     behave exactly as they do in the REPL; see the module docstring for what's different
     about running headless (no approval prompts by default, model choice isn't persisted,
-    reasoning isn't printed unless show_thinking=True, and ephemeral=True skips an agent's
-    persistent chat for a fresh, non-accumulating one).
+    reasoning isn't printed unless show_thinking=True, ephemeral=True skips an agent's
+    persistent chat for a fresh, non-accumulating one, and chat_id targets one specific
+    existing chat instead).
     """
-    with Session(workspace, model, agent, approve, show_thinking, ephemeral):
+    with Session(workspace, model, agent, approve, show_thinking, ephemeral, chat_id):
         return run_turn(message)

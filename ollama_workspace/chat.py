@@ -43,7 +43,9 @@ def main() -> None:
             pass
     try:
         models.refresh()
-    except Exception as e:  # httpx.ConnectError etc. when the server isn't up
+    except RuntimeError as e:
+        sys.exit(str(e))
+    except Exception as e:  # anything else unexpected
         sys.exit(f"Can't reach Ollama ({e}).\nStart the Ollama app or run 'ollama serve', "
                  "then try again.")
     if not models.installed:
@@ -52,7 +54,10 @@ def main() -> None:
     if args.model:  # an explicit choice beats the chat's and the saved one
         if not (name := models.find(args.model)):
             sys.exit(1)
-        set_model(name)
+        try:
+            set_model(name)
+        except RuntimeError as e:
+            sys.exit(str(e))
 
     project = memory.project_dir(config.WORKSPACE)
     trash.purge_old(project)
@@ -80,12 +85,15 @@ def main() -> None:
 
     if models.current is None:  # chat had no (installed) model: saved default, or ask
         default = models.saved_default()
-        if default in models.installed:
-            set_model(default)
-        elif len(models.installed) == 1:
-            set_model(models.installed[0])
-        else:
-            set_model(models.pick())
+        try:
+            if default in models.installed:
+                set_model(default)
+            elif len(models.installed) == 1:
+                set_model(models.installed[0])
+            else:
+                set_model(models.pick())
+        except RuntimeError as e:
+            sys.exit(str(e))
         memory.active.compact_if_needed()
     elif args.model:  # record the explicit choice on this chat
         memory.active.meta["model"] = models.current.name

@@ -123,6 +123,36 @@ def agent_chat(project: Path, agent: "Agent") -> "memory.Chat":
     return chat
 
 
+def agent_chats(project: Path, agent: "Agent") -> list["memory.Chat"]:
+    """Every chat tied to this agent in this project - the persistent one agent_chat uses
+    plus any sibling chats made with new_agent_chat - most recently updated first. Lets a
+    browser UI offer "other chats with this agent" without touching agent_chat's own
+    single-accumulating-context behavior (dispatch_to_agent depends on that staying as is).
+
+    Backfills the "agent" tag onto the persistent chat the first time it's seen, since
+    chats created before this existed won't have the tag yet."""
+    persistent_id = agent.meta.get("chat")
+    out = []
+    for chat in memory.list_chats(project):
+        if chat.meta.get("agent") == agent.name:
+            out.append(chat)
+        elif chat.dir.name == persistent_id and "agent" not in chat.meta:
+            chat.meta["agent"] = agent.name
+            chat.save()
+            out.append(chat)
+    return out
+
+
+def new_agent_chat(project: Path, agent: "Agent", title: str = "") -> "memory.Chat":
+    """A new sibling chat for this agent, independent of its persistent one (agent_chat) -
+    for exploring a side idea without pulling it into the main accumulating context that
+    dispatch_to_agent relies on. Tagged so agent_chats() picks it up."""
+    chat = memory.Chat.create(project, title=title or f"agent:{agent.name}")
+    chat.meta["agent"] = agent.name
+    chat.save()
+    return chat
+
+
 _CODE_WORDS = ("code", "coding", "program", "implement", "develop", "build", "debug",
                "refactor", "script", "edit", "file", "test")
 _TEXT_WORDS = ("supervisor", "coordinat", "audit", "log", "narrat", "summar", "report",

@@ -109,11 +109,17 @@ def run_turn(q: str) -> str:
         print("\033[0m\n[stopped]")
         done_reason = "stopped"
     except ollama.ResponseError as e:
+        if e.status_code == 404:
+            print(f"\033[0m\n[{models.missing_model_message(models.current.name)}]")
+            return ""  # nothing to save
         # the error text comes from the model/server and may contain characters the
         # Windows console's codepage can't print - replace them rather than crash
         safe = str(e.error).encode(sys.stdout.encoding or "utf-8", "replace") \
             .decode(sys.stdout.encoding or "utf-8")
         print(f"\033[0m\n[model error: {safe}] - try /model to switch models")
+        return ""  # nothing to save
+    except ConnectionError:
+        print(f"\033[0m\n[{models.unreachable_server_message()}]")
         return ""  # nothing to save
     reply = "\n".join(replies)
     print()
