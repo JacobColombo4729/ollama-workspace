@@ -43,17 +43,28 @@ def describe_thinking() -> str:
     return f"thinking: {level}{note} ({detail})"
 
 
+def has_tools() -> bool:
+    """Whether the model AND the active agent profile actually give this chat any tools -
+    not just whether the model is capable of tool-calling. A tool-capable model with an
+    agent profile that narrows its tool list to none (e.g. a chat-only agent like scout)
+    should be treated as toolless: otherwise it'd get the CODING prompt's tool instructions
+    and an empty tools=[] sent to the model, for tools it can never actually call."""
+    return bool(models.current.tools and active_tools())
+
+
 def build_messages(user_msg: str) -> list:
     """One combined system message, not several - some models' chat templates reject a
     system message anywhere but first, and reject more than one outright."""
     m = models.current
+    tools_on = has_tools()
+    light = bool(agents.active and agents.active.meta.get("light_context"))
     parts = [
-        memory.active.memory_prompt(m.chars(MEMORY_SHARE), m.tools),
+        memory.active.memory_prompt(m.chars(MEMORY_SHARE), tools_on, light=light),
         CODING.format(
             workspace=config.WORKSPACE, os=platform.system(), shell=SHELL,
             paths=("all paths are relative to the workspace" if guard.restricted() else
                    "paths are relative to the workspace, or absolute"),
-            mode_note=RESTRICTED if guard.restricted() else UNLEASHED) if m.tools else NO_TOOLS,
+            mode_note=RESTRICTED if guard.restricted() else UNLEASHED) if tools_on else NO_TOOLS,
     ]
     if agents.active and agents.active.persona:
         parts.append("Your role: " + agents.active.persona)
@@ -100,7 +111,7 @@ def stream_step(messages: list, num_predict: int) -> tuple[str, str, list, str |
     m = models.current
     show = models.show_thinking()  # read once: a setting change mid-stream shouldn't flicker
     request = dict(model=m.name, messages=messages, stream=True,
-                   tools=active_tools() if m.tools else None, think=m.think_value(think_level()),
+                   tools=active_tools() if has_tools() else None, think=m.think_value(think_level()),
                    options={"num_ctx": m.num_ctx,
                             "num_predict": num_predict + think_budget(),
                             "repeat_penalty": REPEAT_PENALTY,

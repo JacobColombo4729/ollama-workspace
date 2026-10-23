@@ -179,17 +179,26 @@ class Chat:
         self.meta["updated"] = _now()
         self.save()
 
-    def memory_prompt(self, budget: int, searchable: bool) -> str:
+    def memory_prompt(self, budget: int, searchable: bool, light: bool = False) -> str:
         """Notes + the shared board/findings + summaries + recent log, cut to about
         `budget` chars so small-context models still fit. What's cut stays on disk (and
         in search_history for notes/log; the board/findings only ever keep their most
-        recent entries)."""
+        recent entries).
+
+        `light=True` (for a tool-less, chat-only agent that never dispatches or edits the
+        project) drops the shared decisions/board/findings feeds - team-coordination noise
+        that keeps growing as the cluster works and has nothing to do with a standalone
+        conversation. Notes (small/structural) and this chat's own summaries/log are kept,
+        so continuity isn't lost - only the team-wide broadcast feeds are."""
         notes = (self.project / "notes.txt").read_text("utf-8").strip()
         if len(notes) > budget // 8:
             notes = notes[:budget // 8] + "\n...[notes cut off to fit the model's context]"
-        decisions = _tail_feed(self.project / "decisions.txt", budget // 6, "decisions")
-        board = _tail_feed(self.project / "board.txt", budget // 6, "posts")
-        findings = _tail_feed(self.project / "findings.txt", budget // 6, "findings")
+        if light:
+            decisions = board = findings = ""
+        else:
+            decisions = _tail_feed(self.project / "decisions.txt", budget // 6, "decisions")
+            board = _tail_feed(self.project / "board.txt", budget // 6, "posts")
+            findings = _tail_feed(self.project / "findings.txt", budget // 6, "findings")
         left = budget - len(notes) - len(decisions) - len(board) - len(findings)
         shown, used = [], 0
         for s in reversed(self.meta["summaries"]):  # newest summaries first
@@ -207,13 +216,16 @@ class Chat:
             recent = "...[earlier part left out]" + recent[start if start != -1 else -room:]
         recall = (" The summaries are compressed; if you need an exact earlier detail, "
                   "use search_history." if searchable else "")
+        feeds = "" if light else (
+            f"=== PROJECT DECISIONS LOG (recent lasting facts/decisions; full history searchable with search_history) ===\n{decisions or '(none yet)'}\n\n"
+            f"=== SHARED BOARD (recent updates from every agent in this project) ===\n{board or '(none yet)'}\n\n"
+            f"=== SECURITY FINDINGS (recent, from every agent in this project) ===\n{findings or '(none yet)'}\n\n"
+        )
         return normalize(
             "You are a helpful assistant with long-term memory of past conversations "
             f"with this user. Use it naturally; don't recite it unless asked.{recall}\n\n"
             f"=== PROJECT NOTES (team structure/conventions, shared by all chats) ===\n{notes or '(none)'}\n\n"
-            f"=== PROJECT DECISIONS LOG (recent lasting facts/decisions; full history searchable with search_history) ===\n{decisions or '(none yet)'}\n\n"
-            f"=== SHARED BOARD (recent updates from every agent in this project) ===\n{board or '(none yet)'}\n\n"
-            f"=== SECURITY FINDINGS (recent, from every agent in this project) ===\n{findings or '(none yet)'}\n\n"
+            f"{feeds}"
             f"=== SUMMARIES OF OLDER CONVERSATION ===\n{summaries or '(none yet)'}\n\n"
             f"=== RECENT CONVERSATION LOG ===\n{recent or '(none yet)'}"
         )
