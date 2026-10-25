@@ -17,6 +17,7 @@ import os
 import re
 import secrets
 import sys
+import time
 from pathlib import Path
 
 from . import config, memory, scope
@@ -30,6 +31,23 @@ self_edit = False
 
 PASSWORD_FILE = DATA_DIR / "password.json"
 ITERATIONS = 300_000
+
+# Append-only observability log of every dangerous-action gate hit, across every project and
+# caller - this tool's own alert feed, independent of what called run_command. A line here
+# means a command tripped risks()/must_refuse(), whether or not it was then approved; nothing
+# else writes to it. Anything watching this install's behavior (a red-team harness driving it
+# unattended, a curious human) tails this file rather than scraping stdout.
+SECURITY_LOG = DATA_DIR / "security_events.jsonl"
+
+
+def _log_security_event(kind: str, reasons: list[str], command: str) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    row = {
+        "ts": round(time.time(), 3), "kind": kind, "reasons": list(reasons),
+        "command": command[:300], "workspace": str(config.WORKSPACE),
+    }
+    with SECURITY_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 # the tool's own code: hidden from the model in restricted mode, even when it's the workspace
 PROTECTED = [ROOT / "ollama_workspace", ROOT / "chat.py", ROOT / "ochat", ROOT / "ochat.bat"]
@@ -285,16 +303,20 @@ def must_refuse(command: str) -> str | None:
     """
     low = command.lower()
     if str(DATA_DIR).lower() in low or DATA_DIR.as_posix().lower() in low:
-        return ("touches this chat tool's own saved data (chats, password, scope, agent "
-                "profiles), which no command may do in any mode. Edit those files by hand "
-                "if you need to.")
+        msg = ("touches this chat tool's own saved data (chats, password, scope, agent "
+               "profiles), which no command may do in any mode. Edit those files by hand "
+               "if you need to.")
+        _log_security_event("hard_refused", [msg], command)
+        return msg
     if not restricted():
         project = memory.project_dir(config.WORKSPACE)
         if out := scope.out_of_scope(command, project):
-            return (f"touches a target outside this project's defined scope: "
-                    f"{', '.join(out[:3])}. Unleashed mode refuses this outright rather "
-                    "than asking, since no one may be watching to answer. /scope add it "
-                    "first if it's authorized.")
+            msg = (f"touches a target outside this project's defined scope: "
+                   f"{', '.join(out[:3])}. Unleashed mode refuses this outright rather "
+                   "than asking, since no one may be watching to answer. /scope add it "
+                   "first if it's authorized.")
+            _log_security_event("hard_refused", [msg], command)
+            return msg
     return None
 
 
@@ -303,7 +325,9 @@ def approve(command: str, reasons: list[str], what: str = "this command") -> boo
     print(f"\033[1;33m!! RESTRICTED: {what} needs your password\033[0m")
     for i, why in enumerate(reasons):
         print(f"  {'Why:' if i == 0 else '    '} {why}")
-    return _password_ok()
+    ok = _password_ok()
+    _log_security_event("guard_approved" if ok else "guard_denied", reasons, command)
+    return ok
 
 
 def command_env() -> dict:
